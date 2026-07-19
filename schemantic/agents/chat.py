@@ -47,10 +47,10 @@ Rules:
   Only give up after 2-3 distinct attempts.
 - Part identities are AI guesses grounded in schematic text; when one matters to your answer,
   say so briefly (e.g. "identified as INA219, 95% confidence").
-- For spec questions (voltages, interfaces, ratings, package details) use get_datasheet and
-  answer ONLY from its verified facts, citing the page ("36V max bus voltage -- datasheet p.1").
-  If the needed spec isn't among the verified facts, say so and point to the datasheet URL;
-  never fill the gap from memory.
+- For spec questions (voltages, interfaces, ratings, package details) use get_datasheet first;
+  if the parameter isn't among its verified facts, use search_datasheet to find it in the full
+  document and answer by QUOTING the passage with its page ("per datasheet p.23: '...'").
+  If neither finds it, say so and point to the datasheet URL; never fill the gap from memory.
 - Keep answers short and concrete. Lists over prose. No filler.
 - The transcript contains system markers for active-board switches. When recalling earlier
   conversation, attribute earlier statements and tool results to the board that was active at
@@ -116,9 +116,19 @@ def _tool_table(
         ),
         "get_datasheet": (
             "Verified, page-cited facts from the part's fetched datasheet, plus its URL. "
-            "The ONLY permitted source for spec numbers.",
+            "Use FIRST for spec questions.",
             {"ref": ("string", "reference designator, e.g. 'U6'")},
             lambda ref: graph_api.get_datasheet(payload, ref),
+        ),
+        "search_datasheet": (
+            "Full-document search of the part's datasheet PDF: verbatim passages with page "
+            "numbers. Use when the parameter isn't among get_datasheet's digest facts "
+            "(e.g. I2C address, timing, register details). Quote the passage and cite the page.",
+            {
+                "ref": ("string", "reference designator, e.g. 'U7'"),
+                "query": ("string", "parameter terms, e.g. 'I2C slave address'"),
+            },
+            lambda ref, query: graph_api.search_datasheet(payload, ref, query),
         ),
         "list_regions": (
             "All board sections with AI explanations and component counts.",
