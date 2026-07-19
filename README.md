@@ -154,11 +154,34 @@ token was silently rejected and its five pins merged into a neighboring net. Bot
 boards re-verified after the fix (72 and 74 nets), with regression tests locking the corrected
 grouping.
 
+## KiCad native ingestion
+
+KiCad's PDF export embeds no netlist (verified) — but its *source files* are plain s-expressions,
+so KiCad support takes the honest route: parse the sources, no computer vision. Upload a `.net`
+netlist export (or a `.zip` with the `.kicad_pcb` alongside) and the same pipeline runs: the
+netlist gives authoritative connectivity, the PCB file gives **real physical pad placement** (the
+canvas shows the actual board layout), and component values from the netlist feed the same
+identity/datasheet enrichment. Verified against Olimex's real ESP32-PoE project. Boards without a
+PCB file fall back to a synthetic grid — topology identical, layout approximate and said so.
+
+## Coding-agent bridge: Hardware Map + full-datasheet search
+
+- **Export hardware map** (button on the board overview): controller pin tables (pin → net → what's
+  on the other end), bus inventories, power rails (voltages name-derived and flagged as such),
+  connector pinouts, confirmed board links, datasheet URLs with verified facts — as `.md` for
+  prompt context or `.json` for tooling. Deterministic assembly; drop it into a firmware repo so a
+  coding agent knows what's actually wired where.
+- **Any-parameter datasheet answers**: beyond the digest's verified facts, the chat can search the
+  entire cached datasheet PDF (`search_datasheet`) and answer with verbatim passages and page
+  numbers — verified live: asked for the ICM-20948's I2C address (not in any digest) and got the
+  correct 0x68/0x69-by-AD0 answer quoted from page 28.
+
 ## Not yet built
 
-- KiCad/Eagle PDF export support — those tools don't embed a netlist text layer at all (verified
-  against a real Eeschema export), so supporting them means the computer-vision path, not a parser
-  tweak. Unsupported PDFs are rejected with a clear message naming the creator tool.
+- Eagle/OrCAD support, and KiCad *PDF* exports (no embedded netlist; sources are the supported
+  route). Scanned schematics still need the computer-vision path.
+- Schematic → starter firmware generation, and schematic → pre-fabrication design checks — next
+  on the roadmap.
 - Scanned/rasterized schematics with no embedded text layer — that needs real computer-vision
   symbol recognition, a fundamentally different (and much harder) problem than parsing structured
   text, and out of scope for now.
