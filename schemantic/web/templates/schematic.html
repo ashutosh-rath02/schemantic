@@ -19,9 +19,10 @@
       <span class="stat">Enrichment cost <b>${{ "%.3f"|format(totals.spend_usd) }}</b></span>
       <span id="board-switcher" class="board-switcher"></span>
       <form class="upload-form" method="post" action="/upload" enctype="multipart/form-data">
-        <label class="upload-btn">Analyze a PDF
-          <input type="file" name="file" accept=".pdf" hidden
-                 onchange="this.parentElement.firstChild.textContent='Analyzing… (~1 min)'; this.form.submit();">
+        <label class="upload-btn" title="Altium schematic PDF, KiCad netlist (.net), or .zip with .net + .kicad_pcb">
+          Analyze a board
+          <input type="file" name="file" accept=".pdf,.net,.zip" hidden
+                 onchange="this.parentElement.firstChild.textContent='Analyzing… (~1-2 min)'; this.form.submit();">
         </label>
       </form>
     </div>

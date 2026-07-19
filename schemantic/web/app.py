@@ -31,6 +31,8 @@ from schemantic.agents.chat import ChatSession, chat_turn  # noqa: E402
 from schemantic.agents.mate_proposer import propose_mates  # noqa: E402
 from schemantic.chat_memory import ChatMemoryStore  # noqa: E402
 from schemantic.hardwaremap import build_hardware_map, render_markdown  # noqa: E402
+from schemantic.kicad import load_kicad_project  # noqa: E402
+from schemantic.pipeline import enrich_schematic  # noqa: E402
 from schemantic.pipeline import CACHE_DIR, build_enriched_schematic, render_background_image  # noqa: E402
 from schemantic.supervisor.core import BudgetExceeded, Supervisor  # noqa: E402
 
@@ -121,20 +123,55 @@ def index(request: Request, error: str | None = None):
     )
 
 
+def _register_kicad_board(saved: Path, source_name: str) -> str:
+    """KiCad path: .net (+ optional .kicad_pcb) -> same payload shape,
+    same enrichment, same everything downstream."""
+    global _workspace
+    import zipfile
+
+    if saved.suffix.lower() == ".zip":
+        extract_dir = saved.with_suffix("")
+        extract_dir.mkdir(exist_ok=True)
+        with zipfile.ZipFile(saved) as zf:
+            for name in zf.namelist():
+                base = Path(name).name  # flatten: no traversal, no dirs
+                if base and Path(base).suffix.lower() in (".net", ".kicad_pcb"):
+                    (extract_dir / base).write_bytes(zf.read(name))
+        paths = list(extract_dir.iterdir())
+    else:
+        paths = [saved]
+
+    schematic = load_kicad_project(paths, source_name)
+    payload = enrich_schematic(schematic, ws_store.board_id_for(str(saved)))
+    board_id = ws_store.board_id_for(str(saved))
+    _boards[board_id] = {"path": str(saved), "payload": payload}
+    _workspace = ws_store.add_board(_workspace, str(saved))
+    ws_store.save_workspace(_workspace)
+    return board_id
+
+
 @app.post("/upload")
 async def upload(file: UploadFile):
     global _active_board_id
     _ensure_default_board()
-    if not (file.filename or "").lower().endswith(".pdf"):
-        return RedirectResponse(url="/?error=Only+PDF+files+are+supported", status_code=303)
+    filename = file.filename or ""
+    suffix = Path(filename).suffix.lower()
+    if suffix not in (".pdf", ".zip", ".net"):
+        return RedirectResponse(
+            url="/?error=Supported+uploads:+Altium+PDF,+KiCad+.net,+or+.zip+with+.net+%2B+.kicad_pcb",
+            status_code=303,
+        )
     content = await file.read()
     digest = hashlib.sha256(content).hexdigest()[:16]
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    saved = UPLOAD_DIR / f"{digest}_{Path(file.filename).name}"
+    saved = UPLOAD_DIR / f"{digest}_{Path(filename).name}"
     saved.write_bytes(content)
     try:
-        _active_board_id = _register_board(str(saved))
-    except ValueError as exc:  # unsupported PDF family -- honest, actionable message
+        if suffix == ".pdf":
+            _active_board_id = _register_board(str(saved))
+        else:
+            _active_board_id = _register_kicad_board(saved, Path(filename).stem)
+    except ValueError as exc:  # unsupported format -- honest, actionable message
         return RedirectResponse(url=f"/?error={str(exc)[:300]}", status_code=303)
     return RedirectResponse(url="/", status_code=303)
 
@@ -169,9 +206,15 @@ def api_hardwaremap(format: str = "md"):
 
 
 @app.get("/schematic-image")
-def schematic_image() -> FileResponse:
+def schematic_image():
     _ensure_default_board()
-    path = render_background_image(_boards[_active_board_id]["path"])
+    source = _boards[_active_board_id]["path"]
+    if not source.lower().endswith(".pdf"):
+        return JSONResponse(
+            {"error": "no original PDF for this board (KiCad source ingestion)"},
+            status_code=404,
+        )
+    path = render_background_image(source)
     return FileResponse(path, media_type="image/png")
 
 
