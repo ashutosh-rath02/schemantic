@@ -51,3 +51,31 @@ def test_digest_text_tags_pages_one_indexed():
     assert "=== PAGE 1 ===" in text
     assert "=== PAGE 2 ===" in text
     assert text.index("PAGE 1") < text.index("PAGE 2")
+
+
+def test_search_pages_ranks_by_distinct_term_hits():
+    from schemantic.datasheets import search_pages
+
+    pages = [
+        "General description of the device.\nNothing relevant here.",
+        "I2C interface details.\nThe slave address is 0x40 by default.\nTiming follows.",
+        "The address pins A0 and A1 select the address.\nI2C address table below.",
+    ]
+    results = search_pages(pages, "I2C slave address")
+    assert results
+    assert results[0]["page"] == 2  # all three terms co-occur there
+    assert "0x40" in results[0]["passage"]
+
+
+def test_search_pages_returns_empty_for_no_match():
+    from schemantic.datasheets import search_pages
+
+    assert search_pages(["voltage regulator text"], "banana smoothie") == []
+
+
+def test_search_pages_cites_correct_page_numbers():
+    from schemantic.datasheets import search_pages
+
+    pages = ["nothing", "nothing", "shutdown current is 0.1 uA maximum"]
+    results = search_pages(pages, "shutdown current")
+    assert results and results[0]["page"] == 3
