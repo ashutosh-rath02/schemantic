@@ -159,6 +159,58 @@ def fetch_datasheet(mpn: str) -> FetchedDatasheet | None:
     return FetchedDatasheet(mpn=mpn, url=url, source=source, local_path=pdf_path, page_texts=page_texts)
 
 
+MAX_PAGES_FULL_SEARCH = 80  # full-document parameter search cap
+
+
+def full_page_texts(mpn: str) -> list[str] | None:
+    """Every page's text (capped) from the cached datasheet PDF -- the
+    on-demand counterpart to the up-front digest, for 'answer ANY parameter'
+    questions. None if no datasheet is cached for this part."""
+    pdf_path = CACHE_DIR / f"{_slug(mpn)}.pdf"
+    if not pdf_path.exists():
+        return None
+    doc = fitz.open(str(pdf_path))
+    return [page.get_text() for page in doc[:MAX_PAGES_FULL_SEARCH]]
+
+
+def search_pages(page_texts: list[str], query: str, max_passages: int = 4) -> list[dict]:
+    """Keyword passage search with page numbers. Deterministic scoring:
+    passages (line windows) ranked by distinct query-term hits, ties broken
+    by total hits. Returns verbatim text -- the caller quotes it, and the
+    reader can check the cited page, same contract as digest facts."""
+    terms = [t for t in re.findall(r"[a-z0-9.]+", query.lower()) if len(t) > 1]
+    if not terms:
+        return []
+    passages: list[tuple[int, int, int, str]] = []  # (-distinct, -total, page, text)
+    for page_number, text in enumerate(page_texts, start=1):
+        lines = [ln.strip() for ln in text.splitlines()]
+        window = 3
+        for i in range(0, max(len(lines) - window + 1, 1)):
+            chunk = " ".join(ln for ln in lines[i : i + window] if ln)
+            if not chunk:
+                continue
+            lowered = chunk.lower()
+            hits = {t: lowered.count(t) for t in terms}
+            distinct = sum(1 for n in hits.values() if n)
+            total = sum(hits.values())
+            if distinct:
+                passages.append((-distinct, -total, page_number, chunk[:400]))
+    passages.sort()
+    seen: set[str] = set()
+    results = []
+    for neg_distinct, _neg_total, page_number, chunk in passages:
+        key = chunk[:80]
+        if key in seen:
+            continue
+        seen.add(key)
+        results.append(
+            {"page": page_number, "passage": chunk, "distinct_terms": -neg_distinct}
+        )
+        if len(results) >= max_passages:
+            break
+    return results
+
+
 _NORMALIZE = re.compile(r"[^a-z0-9.%±+/-]+")
 
 
