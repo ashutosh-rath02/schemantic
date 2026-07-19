@@ -61,17 +61,19 @@ def render_background_image(pdf_path: str, scale: float = 2.0) -> Path:
     return image_path
 
 
-def build_enriched_schematic(
-    pdf_path: str,
+def enrich_schematic(
+    schematic: Schematic,
+    cache_key: str,
     max_spend_usd: float = 2.0,
     workers: int = 8,
     use_cache: bool = True,
 ) -> dict:
-    cache_path = CACHE_DIR / f"{_pdf_hash(pdf_path)}_v{SCHEMA_VERSION}.json"
+    """Format-agnostic enrichment core: identities, regions, datasheets,
+    assembly, caching. The PDF and KiCad ingestion paths both end here."""
+    cache_path = CACHE_DIR / f"{cache_key}_v{SCHEMA_VERSION}.json"
     if use_cache and cache_path.exists():
         return json.loads(cache_path.read_text(encoding="utf-8"))
 
-    schematic = parse_schematic_pdf(pdf_path)
     client = OpenAI()
     supervisor = Supervisor(max_spend_usd=max_spend_usd)
 
@@ -84,6 +86,22 @@ def build_enriched_schematic(
     CACHE_DIR.mkdir(exist_ok=True)
     cache_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
     return result
+
+
+def build_enriched_schematic(
+    pdf_path: str,
+    max_spend_usd: float = 2.0,
+    workers: int = 8,
+    use_cache: bool = True,
+) -> dict:
+    cache_path = CACHE_DIR / f"{_pdf_hash(pdf_path)}_v{SCHEMA_VERSION}.json"
+    if use_cache and cache_path.exists():
+        return json.loads(cache_path.read_text(encoding="utf-8"))
+
+    schematic = parse_schematic_pdf(pdf_path)
+    return enrich_schematic(
+        schematic, _pdf_hash(pdf_path), max_spend_usd, workers, use_cache
+    )
 
 
 def _identify_all_parts(
