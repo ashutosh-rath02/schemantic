@@ -1,0 +1,29 @@
+[project]
+name = "schemantic"
+version = "0.1.0"
+description = "Turns an EDA-exported schematic PDF into an explorable, understood circuit -- deterministic netlist extraction plus an agent layer for semantic labeling and part lookup."
+requires-python = ">=3.11"
+dependencies = [
+    "pymupdf>=1.24",
+    "pydantic>=2.7",
+    "openai>=1.30",
+    "fastapi>=0.111",
+    "uvicorn>=0.30",
+    "jinja2>=3.1",
+    "httpx>=0.27",
+    "python-dotenv>=1.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.5"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["schemantic*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
