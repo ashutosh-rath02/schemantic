@@ -9,3 +9,4 @@ __pycache__/
 .claude/
 Thumbs.db
 *.png
+test_boards/kicad/*.zip
