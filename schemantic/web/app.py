@@ -30,6 +30,7 @@ from schemantic import workspace as ws_store  # noqa: E402
 from schemantic.agents.chat import ChatSession, chat_turn  # noqa: E402
 from schemantic.agents.mate_proposer import propose_mates  # noqa: E402
 from schemantic.chat_memory import ChatMemoryStore  # noqa: E402
+from schemantic.hardwaremap import build_hardware_map, render_markdown  # noqa: E402
 from schemantic.pipeline import CACHE_DIR, build_enriched_schematic, render_background_image  # noqa: E402
 from schemantic.supervisor.core import BudgetExceeded, Supervisor  # noqa: E402
 
@@ -142,6 +143,29 @@ async def upload(file: UploadFile):
 def api_schematic() -> JSONResponse:
     _ensure_default_board()
     return JSONResponse(_active_payload())
+
+
+@app.get("/api/hardwaremap")
+def api_hardwaremap(format: str = "md"):
+    """The board's verified facts packaged for a coding agent: controller
+    pin tables, buses, rails, connectors, datasheet links. Deterministic
+    assembly -- no model call. ?format=json for the structured form."""
+    _ensure_default_board()
+    names = _board_names()
+    board_name = names.get(_active_board_id, "board")
+    mates = [
+        m for m in ws_store.confirmed_mates(_workspace)
+        if _active_board_id in (m["board_a"], m["board_b"])
+    ]
+    hw_map = build_hardware_map(_active_payload(), board_name, mates)
+    if format == "json":
+        return JSONResponse(hw_map)
+    markdown = render_markdown(hw_map)
+    return HTMLResponse(
+        markdown,
+        media_type="text/markdown",
+        headers={"Content-Disposition": f'attachment; filename="hardwaremap_{board_name}.md"'},
+    )
 
 
 @app.get("/schematic-image")

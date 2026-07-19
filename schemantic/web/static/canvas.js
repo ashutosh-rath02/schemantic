@@ -482,6 +482,12 @@ function renderOverview() {
     <div class="panel-section">
       <div class="panel-title">Board overview</div>
       <div class="panel-sub">${schematic.components.length} components · ${Object.keys(schematic.nets).length} nets · click a section to zoom to it</div>
+      <div class="link-row" style="margin-top:8px;">
+        <a class="link-btn" href="/api/hardwaremap" download>Export hardware map (.md)</a>
+        <a class="link-btn" href="/api/hardwaremap?format=json" target="_blank" rel="noopener">.json</a>
+      </div>
+      <span class="hint">Pin tables, buses, rails, datasheet links — drop it into a firmware repo
+      so a coding agent knows what's actually wired where.</span>
     </div>
     ${regions.map(([name, info]) => `
       <div class="panel-section overview-region" data-region="${esc(name)}">
