@@ -219,6 +219,39 @@ def get_datasheet(payload: Payload, ref: str) -> dict:
     return {"ref": _label(c), **sheet}
 
 
+def search_datasheet(payload: Payload, ref: str, query: str) -> dict:
+    """Full-document parameter search: verbatim passages with page numbers
+    from the part's cached datasheet PDF, beyond the digest's few facts.
+    The digest answers the common questions; this answers 'ANY parameter'."""
+    from schemantic.datasheets import full_page_texts, search_pages
+
+    c = _find_component(payload, ref)
+    if c is None:
+        return {"error": f"no component matching {ref!r} on this board"}
+    sheet = c.get("datasheet")
+    identity = c.get("identity") or {}
+    mpn = (sheet or {}).get("mpn") or identity.get("likely_part_number")
+    if not mpn:
+        return {"error": f"{_label(c)} has no identified part number to search a datasheet for"}
+    pages = full_page_texts(mpn)
+    if pages is None:
+        return {
+            "ref": _label(c),
+            "no_datasheet": True,
+            "note": "no cached datasheet for this part",
+            "datasheet_url": (sheet or {}).get("url"),
+        }
+    passages = search_pages(pages, query)
+    return {
+        "ref": _label(c),
+        "mpn": mpn,
+        "datasheet_url": (sheet or {}).get("url"),
+        "pages_searched": len(pages),
+        "passages": passages
+        or [{"note": "no passage matched -- try different terms, or read the PDF directly"}],
+    }
+
+
 def list_regions(payload: Payload) -> list[dict]:
     counts: dict[str | None, int] = {}
     for c in _components(payload):
