@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Schemantic</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <span class="logo">Schemantic</span>
+    <span class="tagline">{{ source_name }} — understood, not just redrawn
+      <a href="/schematic-image" target="_blank" rel="noopener" class="original-link">view original</a>
+    </span>
+    <div class="stats-bar">
+      <span class="stat">Components <b>{{ totals.components }}</b></span>
+      <span class="stat">Nets <b>{{ totals.nets }}</b></span>
+      <span class="stat">Sections <b>{{ totals.regions }}</b></span>
+      <span class="stat">Enrichment cost <b>${{ "%.3f"|format(totals.spend_usd) }}</b></span>
+      <span id="board-switcher" class="board-switcher"></span>
+      <form class="upload-form" method="post" action="/upload" enctype="multipart/form-data">
+        <label class="upload-btn">Analyze a PDF
+          <input type="file" name="file" accept=".pdf" hidden
+                 onchange="this.parentElement.firstChild.textContent='Analyzing… (~1 min)'; this.form.submit();">
+        </label>
+      </form>
+    </div>
+  </header>
+  {% if error %}
+  <div class="error-banner">{{ error }}</div>
+  {% endif %}
+
+  <div class="layout">
+    <div class="canvas-pane">
+      <div class="canvas-toolbar">
+        <div class="search-wrap">
+          <input id="search-input" type="text" placeholder="Search components, parts, nets…" autocomplete="off">
+          <div id="search-results" class="search-results"></div>
+        </div>
+        <div id="region-filter" class="region-chips-wrap"></div>
+      </div>
+      <svg id="schematic-svg"></svg>
+      <div class="canvas-legend">
+        <span class="lg lg-ic">IC / module</span>
+        <span class="lg lg-conn">connector</span>
+        <span class="lg lg-trans">transistor</span>
+        <span class="lg lg-diode">diode / LED</span>
+        <span class="lg lg-passive">passive</span>
+      </div>
+      <div class="canvas-help">scroll to zoom &middot; drag to pan &middot; click parts or wires &middot; Esc to clear &middot; zoom in for pin detail</div>
+      <button class="reset-view" id="reset-view">Reset view</button>
+    </div>
+    <aside class="side-column">
+      <div class="side-panel" id="side-panel"></div>
+      <div class="chat-drawer" id="chat-drawer">
+        <div class="chat-header" id="chat-toggle">
+          <span>Ask the board</span>
+          <span class="chat-hint">answers come from the parsed netlist, not model memory</span>
+          <span class="chat-caret" id="chat-caret">▾</span>
+        </div>
+        <div class="chat-body" id="chat-body">
+          <div class="chat-messages" id="chat-messages">
+            <div class="chat-msg chat-msg-bot">Ask things like <i>"where is the IMU?"</i>,
+            <i>"what is U6 connected to?"</i>, <i>"how does the ESP32 talk to the motor driver?"</i>,
+            or <i>"what voltage range does U6 support?"</i> — connectivity comes from the verified
+            netlist, specs come quoted from the fetched datasheet with page numbers, and I'll
+            highlight what I'm talking about on the canvas.</div>
+          </div>
+          <form class="chat-input-row" id="chat-form">
+            <input id="chat-input" type="text" placeholder="Ask about this board…" autocomplete="off">
+            <button type="submit" class="chat-send" id="chat-send">Ask</button>
+          </form>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script src="/static/canvas.js"></script>
+</body>
+</html>
