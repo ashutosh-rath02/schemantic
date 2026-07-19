@@ -485,6 +485,8 @@ function renderOverview() {
       <div class="link-row" style="margin-top:8px;">
         <a class="link-btn" href="/api/hardwaremap" download>Export hardware map (.md)</a>
         <a class="link-btn" href="/api/hardwaremap?format=json" target="_blank" rel="noopener">.json</a>
+        <a class="link-btn" href="/api/firmware-starter" download
+           title="Pin header + demo sketch generated from the map — ~30s, a starting point, not production">Starter firmware (.zip)</a>
       </div>
       <span class="hint">Pin tables, buses, rails, datasheet links — drop it into a firmware repo
       so a coding agent knows what's actually wired where.</span>
