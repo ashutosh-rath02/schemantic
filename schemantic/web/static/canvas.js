@@ -231,7 +231,7 @@ function buildScene() {
       g.appendChild(hit);
     }
     const title = document.createElementNS(SVG_NS, "title");
-    title.textContent = `${net.names.join(" / ")} — ${net.members.length} components`;
+    title.textContent = `${net.names.join(" / ")} -- ${net.members.length} components`;
     g.appendChild(title);
     gWires.appendChild(g);
   }
@@ -275,7 +275,7 @@ function buildScene() {
     g.appendChild(label);
 
     const title = document.createElementNS(SVG_NS, "title");
-    title.textContent = `${c.display_label || c.encoded_refdes} — ${c.region || "unlabeled area"}`;
+    title.textContent = `${c.display_label || c.encoded_refdes} -- ${c.region || "unlabeled area"}`;
     g.appendChild(title);
     gComps.appendChild(g);
   }
@@ -486,16 +486,16 @@ function renderOverview() {
         <a class="link-btn" href="/api/hardwaremap" download>Export hardware map (.md)</a>
         <a class="link-btn" href="/api/hardwaremap?format=json" target="_blank" rel="noopener">.json</a>
         <a class="link-btn" href="/api/firmware-starter" download
-           title="Pin header + demo sketch generated from the map — ~30s, a starting point, not production">Starter firmware (.zip)</a>
+           title="Pin header + demo sketch generated from the map -- ~30s, a starting point, not production">Starter firmware (.zip)</a>
       </div>
-      <span class="hint">Pin tables, buses, rails, datasheet links — drop it into a firmware repo
+      <span class="hint">Pin tables, buses, rails, datasheet links -- drop it into a firmware repo
       so a coding agent knows what's actually wired where.</span>
     </div>
     <div class="panel-section" id="design-checks-section">
       <h3>Pre-fab checks <button class="btn" id="run-checks-btn" style="float:right; font-size:11px; padding:3px 9px;">Run</button></h3>
       <p class="hint">Missing I2C pull-ups, floating enable pins, unidentified controllers, rail
       mismatches. Mechanical findings come from verified connectivity; heuristic findings lean on
-      AI part identity. Not an ERC/DRC replacement — no CAD project to check against, this is what
+      AI part identity. Not an ERC/DRC replacement -- no CAD project to check against, this is what
       a schematic PDF alone can support.</p>
       <div id="design-checks-results"></div>
     </div>
@@ -508,7 +508,7 @@ function renderOverview() {
       <div class="panel-section">
         <h3>Unlabeled areas <span class="hint">${unlabeledCount} components</span></h3>
         <p style="font-size:12.5px; margin:0;" class="text-dim">This schematic draws no section title
-        near these components, so no section is claimed for them — an honest gap, not an error.
+        near these components, so no section is claimed for them -- an honest gap, not an error.
         Use the "unlabeled" chip above the canvas to see them.</p>
       </div>` : ""}
     ${boardLinksHtml()}
@@ -536,13 +536,13 @@ function renderComponentPanel(c) {
         <div class="confidence-bar"><div class="confidence-fill ${confClass}" style="width:${identity.confidence * 100}%"></div></div>
         ${c.pin_count_mismatch ? `
         <div class="mismatch-warning">⚠ The claimed package doesn't match the ${c.pin_count} pins
-        parsed from the schematic — mechanically checked, worth verifying before trusting.</div>` : ""}
+        parsed from the schematic -- mechanically checked, worth verifying before trusting.</div>` : ""}
         <p style="font-size:13px; margin-top:10px;">${esc(identity.function)}</p>
         <details class="reasoning-details">
           <summary>Why the AI thinks so</summary>
           <div class="reasoning-block">${esc(identity.reasoning)}</div>
         </details>
-        <p class="hint">AI guess grounded in visible schematic text — check against the real part:</p>
+        <p class="hint">AI guess grounded in visible schematic text -- check against the real part:</p>
         <div class="link-row">
           ${Object.entries(c.lookup_links).map(([name, url]) =>
             `<a class="link-btn" href="${esc(url)}" target="_blank" rel="noopener">${esc(name.replace("_", " "))}</a>`
@@ -564,7 +564,7 @@ function renderComponentPanel(c) {
             <div class="ds-quote">“${esc(f.quote)}” <span class="ds-cite">p.${f.page} <span class="hash-ok">✓ verified</span></span></div>
           </div>`).join("")}
         ${ds.facts_dropped_unverified ? `<p class="hint">${ds.facts_dropped_unverified} extracted fact(s) failed quote verification and were dropped.</p>` : ""}
-        <p class="hint">Quotes are checked mechanically against the fetched PDF — facts that fail are never shown.</p>
+        <p class="hint">Quotes are checked mechanically against the fetched PDF -- facts that fail are never shown.</p>
         <div class="link-row">
           <a class="link-btn" href="${esc(ds.url)}" target="_blank" rel="noopener">open datasheet (${esc(ds.source.replace("web-search:", ""))})</a>
         </div>
@@ -646,7 +646,7 @@ async function runDesignChecks(btn) {
     const res = await fetch("/api/design-checks");
     const data = await res.json();
     if (!data.findings.length) {
-      out.innerHTML = '<p class="hint" style="color:var(--green);">No findings — nothing the mechanical or heuristic checks flagged.</p>';
+      out.innerHTML = '<p class="hint" style="color:var(--green);">No findings -- nothing the mechanical or heuristic checks flagged.</p>';
     } else {
       out.innerHTML = `
         <p style="font-size:12px; margin:6px 0;">${data.counts.warn || 0} warn · ${data.counts.info || 0} info</p>
@@ -751,10 +751,10 @@ function boardLinksHtml() {
        <td>↔</td><td class="mono">${esc(m.board_b_connector)}.${esc(pm.b_pin)}</td><td class="mono">${esc(pm.b_net)}</td></tr>`
     ).join("");
     const statusBadge = m.status === "confirmed"
-      ? '<span class="badge badge-verified">confirmed — traversable</span>'
+      ? '<span class="badge badge-verified">confirmed -- traversable</span>'
       : m.status === "rejected"
         ? '<span class="badge">rejected</span>'
-        : '<span class="badge badge-inferred">AI-proposed — needs your call</span>';
+        : '<span class="badge badge-inferred">AI-proposed -- needs your call</span>';
     const buttons = m.status === "proposed"
       ? `<div class="label-buttons" style="margin-top:8px;">
            <button class="btn btn-good" data-mate="${esc(m.id)}" data-decision="confirmed">Confirm link</button>
@@ -773,7 +773,7 @@ function boardLinksHtml() {
   return `
     <div class="panel-section">
       <h3>Board-to-board links</h3>
-      <p class="hint" style="margin-bottom:8px;">Connector matings aren't in the schematics — they're
+      <p class="hint" style="margin-bottom:8px;">Connector matings aren't in the schematics -- they're
       physical harness decisions. The AI proposes candidates with pin-level evidence (each one
       mechanically validated against the real connectors); only links YOU confirm become
       traversable in cross-board answers.</p>
@@ -944,7 +944,7 @@ async function sendChat(message) {
     applyChatCanvasCommands(data);
   } catch (err) {
     thinking.remove();
-    addChatMsg("chat-msg-bot", "request failed — is the server still running?");
+    addChatMsg("chat-msg-bot", "request failed -- is the server still running?");
   } finally {
     chatBusy = false;
     chatSend.disabled = false;
