@@ -1,9 +1,15 @@
 # Schemantic
 
+[![tests](https://github.com/ashutosh-rath02/schemantic/actions/workflows/tests.yml/badge.svg)](https://github.com/ashutosh-rath02/schemantic/actions/workflows/tests.yml)
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![python](https://img.shields.io/badge/python-3.11-blue.svg)](pyproject.toml)
+
 **A multi-agent system that turns a circuit board's schematic PDF into something actually
 understood** -- a live connectivity graph, AI-identified parts with page-cited datasheet facts, a
 grounded chat agent that reasons over the verified graph, and exports a coding agent can build
 firmware from. Not a redraw: every wire you see is parsed fact, not a guess.
+
+**Live demo:** http://3.220.187.89:8000/ (moving to `schemantic.ashutoshrath.me` shortly)
 
 ![Chat agent tracing a real signal path across six nets, with semantic memory recalling a related past exchange](docs/screenshot-chat.png)
 
