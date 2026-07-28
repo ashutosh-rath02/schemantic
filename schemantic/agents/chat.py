@@ -25,6 +25,7 @@ from openai import OpenAI
 from pydantic import BaseModel, Field
 
 from schemantic import graph_api
+from schemantic.design_checks import run_all_checks
 from schemantic.supervisor.core import Supervisor
 
 MODEL = os.getenv("SCHEMANTIC_CHAT_MODEL", "gpt-4.1")
@@ -139,6 +140,14 @@ def _tool_table(
             "Board-level totals: source file, component/net/region counts.",
             {},
             lambda: graph_api.board_summary(payload),
+        ),
+        "run_design_checks": (
+            "Pre-fab findings on this board: missing I2C pull-ups, floating enable/reset pins, "
+            "unidentified controllers, and supply-rail mismatches. Each finding is tagged "
+            "'mechanical' (from verified connectivity) or 'heuristic' (from AI part identity) "
+            "-- state which tier a finding is when you mention it. Not an ERC/DRC replacement.",
+            {},
+            lambda: run_all_checks(payload),
         ),
     }
 

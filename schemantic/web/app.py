@@ -30,6 +30,7 @@ from schemantic import workspace as ws_store  # noqa: E402
 from schemantic.agents.chat import ChatSession, chat_turn  # noqa: E402
 from schemantic.agents.mate_proposer import propose_mates  # noqa: E402
 from schemantic.chat_memory import ChatMemoryStore  # noqa: E402
+from schemantic.design_checks import run_all_checks  # noqa: E402
 from schemantic.hardwaremap import build_hardware_map, render_markdown  # noqa: E402
 from schemantic.kicad import load_kicad_project  # noqa: E402
 from schemantic.pipeline import enrich_schematic  # noqa: E402
@@ -255,6 +256,15 @@ def api_firmware_starter():
             "Content-Disposition": f'attachment; filename="starter_{board_name}.zip"'
         },
     )
+
+
+@app.get("/api/design-checks")
+def api_design_checks() -> JSONResponse:
+    """Pre-fab findings: mechanical (verified-connectivity-derived) and
+    heuristic (AI-identity-derived) tiers, each labeled. Not an ERC/DRC
+    replacement -- see schemantic/design_checks.py for the exact scope."""
+    _ensure_default_board()
+    return JSONResponse(run_all_checks(_active_payload()))
 
 
 @app.get("/schematic-image")
