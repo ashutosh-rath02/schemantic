@@ -9,7 +9,7 @@ understood** -- a live connectivity graph, AI-identified parts with page-cited d
 grounded chat agent that reasons over the verified graph, and exports a coding agent can build
 firmware from. Not a redraw: every wire you see is parsed fact, not a guess.
 
-**Live demo:** http://3.220.187.89:8000/ (moving to `schemantic.ashutoshrath.me` shortly)
+**Live demo:** https://schemantic.ashutoshrath.me/
 
 ![Chat agent tracing a real signal path across six nets, with semantic memory recalling a related past exchange](docs/screenshot-chat.png)
 
