@@ -150,7 +150,7 @@ def fetch_datasheet(mpn: str) -> FetchedDatasheet | None:
     url, source = located
     try:
         page_texts = _page_texts(pdf_path)
-    except Exception:  # noqa: BLE001 -- corrupt/odd PDF: treat as not found
+    except Exception:
         pdf_path.unlink(missing_ok=True)
         meta_path.write_text(json.dumps({"not_found": True}), encoding="utf-8")
         return None
@@ -185,7 +185,7 @@ def search_pages(page_texts: list[str], query: str, max_passages: int = 4) -> li
     for page_number, text in enumerate(page_texts, start=1):
         lines = [ln.strip() for ln in text.splitlines()]
         window = 3
-        for i in range(0, max(len(lines) - window + 1, 1)):
+        for i in range(max(len(lines) - window + 1, 1)):
             chunk = " ".join(ln for ln in lines[i : i + window] if ln)
             if not chunk:
                 continue

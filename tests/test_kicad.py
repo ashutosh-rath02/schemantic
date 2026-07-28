@@ -6,7 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from schemantic.kicad import build_schematic, parse_netlist, parse_pcb_positions, parse_sexpr
+from schemantic.kicad import (
+    build_schematic,
+    parse_netlist,
+    parse_pcb_positions,
+    parse_sexpr,
+)
 
 KICAD_DIR = Path(__file__).parent.parent / "test_boards" / "kicad"
 NET = KICAD_DIR / "ESP32-PoE_Rev_J.net"

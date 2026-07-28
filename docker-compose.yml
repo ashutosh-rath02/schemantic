@@ -7,10 +7,11 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
     volumes:
       # enrichment cache, fetched datasheets, workspace.json, and the
-      # chat-memory SQLite DB all live here -- named volume so a container
-      # rebuild doesn't lose them (re-enriching a board costs real API spend)
-      - schemantic_cache:/app/.cache
+      # chat-memory SQLite DB all live here -- a bind mount (not a named
+      # volume) so it's the same directory `docker compose build` runs
+      # next to, letting a deployment seed it directly (scp real enrichment
+      # results in before first start) rather than needing `docker cp` into
+      # an opaque Docker-managed volume. A container rebuild doesn't lose
+      # it either way -- re-enriching a board costs real API spend.
+      - ./.cache:/app/.cache
     restart: unless-stopped
-
-volumes:
-  schemantic_cache:

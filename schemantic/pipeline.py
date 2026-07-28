@@ -118,7 +118,7 @@ def _identify_all_parts(
             try:
                 ref_token, identity = future.result()
                 identities[ref_token] = identity
-            except Exception as exc:  # noqa: BLE001 -- one failed unit shouldn't sink the batch
+            except Exception as exc:
                 print(f"part identification failed for one component: {exc}")
 
     return identities
@@ -151,7 +151,7 @@ def _explain_all_regions(
             region = futures[future]
             try:
                 explanations[region] = future.result()
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 print(f"region explanation failed for {region!r}: {exc}")
 
     return explanations
@@ -197,7 +197,7 @@ def _fetch_all_datasheets(
             if fetched is None:
                 continue
             digests[mpn] = digest_datasheet(fetched, client, supervisor)
-        except Exception as exc:  # noqa: BLE001 -- one bad PDF shouldn't sink the batch
+        except Exception as exc:
             print(f"datasheet step failed for {mpn}: {exc}")
     return digests
 

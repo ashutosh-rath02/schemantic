@@ -29,7 +29,11 @@ import re
 import fitz
 
 from schemantic.parser.models import Component, Net, Pin, Schematic
-from schemantic.parser.regions import assign_regions, extract_region_titles, extract_walls
+from schemantic.parser.regions import (
+    assign_regions,
+    extract_region_titles,
+    extract_walls,
+)
 from schemantic.parser.values import looks_like_value
 
 _LABEL_MAX_LEN = 20  # visible spans longer than this are prose, not a refdes
