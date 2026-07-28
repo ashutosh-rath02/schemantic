@@ -25,8 +25,8 @@ from __future__ import annotations
 import sqlite3
 import struct
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 DEFAULT_TOP_K = 3
 MIN_SIMILARITY = 0.35  # below this, "matches" are noise -- return nothing
@@ -57,7 +57,10 @@ def _unpack(blob: bytes) -> list[float]:
 def _cosine(a: list[float], b: list[float]) -> float:
     if len(a) != len(b):
         return 0.0
-    dot = sum(x * y for x, y in zip(a, b))
+    # strict=True documents that the length check above is what makes this
+    # safe -- if that invariant is ever broken by a future edit, this fails
+    # loudly instead of silently truncating one vector.
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
     norm_a = sum(x * x for x in a) ** 0.5
     norm_b = sum(x * x for x in b) ** 0.5
     if not norm_a or not norm_b:
@@ -101,7 +104,7 @@ class ChatMemoryStore:
                     ),
                 )
             return True
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             print(f"chat memory store failed (non-fatal): {exc}")
             return False
 
@@ -114,7 +117,7 @@ class ChatMemoryStore:
                 rows = conn.execute(
                     "SELECT board, question, answer, created_at, embedding FROM exchanges"
                 ).fetchall()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             print(f"chat memory recall failed (non-fatal): {exc}")
             return []
         scored = []

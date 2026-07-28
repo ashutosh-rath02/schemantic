@@ -33,8 +33,12 @@ from schemantic.chat_memory import ChatMemoryStore  # noqa: E402
 from schemantic.design_checks import run_all_checks  # noqa: E402
 from schemantic.hardwaremap import build_hardware_map, render_markdown  # noqa: E402
 from schemantic.kicad import load_kicad_project  # noqa: E402
-from schemantic.pipeline import enrich_schematic  # noqa: E402
-from schemantic.pipeline import CACHE_DIR, build_enriched_schematic, render_background_image  # noqa: E402
+from schemantic.pipeline import (  # noqa: E402
+    CACHE_DIR,
+    build_enriched_schematic,
+    enrich_schematic,
+    render_background_image,
+)
 from schemantic.supervisor.core import BudgetExceeded, Supervisor  # noqa: E402
 
 EMBED_MODEL = os.getenv("SCHEMANTIC_EMBED_MODEL", "text-embedding-3-small")
@@ -332,7 +336,8 @@ def api_propose_mates() -> JSONResponse:
     """Runs the proposer across the two most relevant boards (v1: exactly
     two boards in workspace). Proposals are mechanically validated before
     storage; invalid ones are dropped and counted."""
-    global _workspace
+    # no `global _workspace` needed here: store_proposals mutates the dict
+    # in place (appends to ws["mates"]), it doesn't return a new object
     _ensure_default_board()
     board_ids = list(_boards.keys())
     if len(board_ids) < 2:
@@ -382,7 +387,7 @@ class MateDecision(BaseModel):
 
 @app.post("/api/mates/{mate_id}")
 def api_mate_decision(mate_id: str, req: MateDecision) -> JSONResponse:
-    global _workspace
+    # no `global _workspace` needed here either -- same reason: in-place mutation
     if req.status not in ("confirmed", "rejected"):
         return JSONResponse({"error": "status must be confirmed or rejected"}, status_code=400)
     if not ws_store.set_mate_status(_workspace, mate_id, req.status):

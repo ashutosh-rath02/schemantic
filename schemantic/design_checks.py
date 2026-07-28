@@ -180,7 +180,17 @@ def check_unidentified_controllers(payload: dict) -> list[dict]:
 # bound of ranges like this, which then failed to contain the board's
 # actual 3.3V rail -- a false positive on the ESP32 itself, caught by
 # reading live output rather than trusting the check unverified.
-_VOLTAGE_RANGE = re.compile(r"(\d+(?:\.\d+)?)\s*V?\s*(?:to|-|–)\s*(\d+(?:\.\d+)?)\s*V", re.IGNORECASE)
+#
+# The separator alternation includes an EN DASH (U+2013) deliberately, not
+# as a stray character -- professionally typeset datasheet PDFs commonly
+# use one for a numeric range (e.g. "3.0" + EN DASH + "3.6 V") instead of a
+# plain hyphen. Spelled out here instead of pasting the literal character a
+# second time, which is exactly the ambiguous-glyph situation this comment
+# is explaining.
+_VOLTAGE_RANGE = re.compile(
+    r"(\d+(?:\.\d+)?)\s*V?\s*(?:to|-|–)\s*(\d+(?:\.\d+)?)\s*V",  # noqa: RUF001
+    re.IGNORECASE,
+)
 _VOLTAGE_SINGLE = re.compile(r"(\d+(?:\.\d+)?)\s*V\b")
 _RAIL_NAME_VOLTAGE = re.compile(r"(\d+)V(\d*)", re.IGNORECASE)
 

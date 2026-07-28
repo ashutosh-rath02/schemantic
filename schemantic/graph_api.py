@@ -183,7 +183,7 @@ def path_between(payload: Payload, ref_a: str, ref_b: str, include_power: bool =
                 if member in seen:
                     continue
                 seen.add(member)
-                next_path = path + [f"net:{net_key}", _label(by_token[member])]
+                next_path = [*path, f"net:{net_key}", _label(by_token[member])]
                 if member == b["ref_token"]:
                     return {
                         "found": True,
@@ -404,7 +404,7 @@ def cross_board_path(
             if neighbor in seen:
                 continue
             seen.add(neighbor)
-            next_path = path + [labels.get(neighbor, neighbor)]
+            next_path = [*path, labels.get(neighbor, neighbor)]
             if neighbor == goal:
                 return {"found": True, "path": next_path, "mate_bridges_available": bridges}
             queue.append((neighbor, next_path))

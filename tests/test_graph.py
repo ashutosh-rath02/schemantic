@@ -36,10 +36,16 @@ def test_mst_connects_every_pin(graph):
         points = {(p["x"], p["y"]) for p in net["pins"]}
         parent = {pt: pt for pt in points}
 
+        # ruff (correctly cautious) flags `parent` as a loop-bound closure
+        # variable, but this is safe: `parent` and `find` are both rebuilt
+        # fresh each outer-loop iteration and `find` is only ever called
+        # synchronously within that same iteration (never stored for later),
+        # so there's no stale-capture window the way there would be if this
+        # closure escaped the loop.
         def find(a):
-            while parent[a] != a:
-                parent[a] = parent[parent[a]]
-                a = parent[a]
+            while parent[a] != a:  # noqa: B023
+                parent[a] = parent[parent[a]]  # noqa: B023
+                a = parent[a]  # noqa: B023
             return a
 
         for x1, y1, x2, y2 in net["segments"]:

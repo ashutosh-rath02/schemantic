@@ -18,8 +18,9 @@ from __future__ import annotations
 import json
 import os
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 from openai import OpenAI
 from pydantic import BaseModel, Field
@@ -107,8 +108,8 @@ def _tool_table(
             lambda name: graph_api.get_net(payload, name),
         ),
         "path_between": (
-            "Shortest electrical path between two components via signal nets "
-            "(power rails excluded unless include_power).",
+            ("Shortest electrical path between two components via signal nets "
+             "(power rails excluded unless include_power)."),
             {
                 "ref_a": ("string", "first component ref"),
                 "ref_b": ("string", "second component ref"),
@@ -116,15 +117,15 @@ def _tool_table(
             lambda ref_a, ref_b: graph_api.path_between(payload, ref_a, ref_b),
         ),
         "get_datasheet": (
-            "Verified, page-cited facts from the part's fetched datasheet, plus its URL. "
-            "Use FIRST for spec questions.",
+            ("Verified, page-cited facts from the part's fetched datasheet, plus its URL. "
+             "Use FIRST for spec questions."),
             {"ref": ("string", "reference designator, e.g. 'U6'")},
             lambda ref: graph_api.get_datasheet(payload, ref),
         ),
         "search_datasheet": (
-            "Full-document search of the part's datasheet PDF: verbatim passages with page "
-            "numbers. Use when the parameter isn't among get_datasheet's digest facts "
-            "(e.g. I2C address, timing, register details). Quote the passage and cite the page.",
+            ("Full-document search of the part's datasheet PDF: verbatim passages with page "
+             "numbers. Use when the parameter isn't among get_datasheet's digest facts "
+             "(e.g. I2C address, timing, register details). Quote the passage and cite the page."),
             {
                 "ref": ("string", "reference designator, e.g. 'U7'"),
                 "query": ("string", "parameter terms, e.g. 'I2C slave address'"),
@@ -142,10 +143,10 @@ def _tool_table(
             lambda: graph_api.board_summary(payload),
         ),
         "run_design_checks": (
-            "Pre-fab findings on this board: missing I2C pull-ups, floating enable/reset pins, "
-            "unidentified controllers, and supply-rail mismatches. Each finding is tagged "
-            "'mechanical' (from verified connectivity) or 'heuristic' (from AI part identity) "
-            "-- state which tier a finding is when you mention it. Not an ERC/DRC replacement.",
+            ("Pre-fab findings on this board: missing I2C pull-ups, floating enable/reset pins, "
+             "unidentified controllers, and supply-rail mismatches. Each finding is tagged "
+             "'mechanical' (from verified connectivity) or 'heuristic' (from AI part identity) "
+             "-- state which tier a finding is when you mention it. Not an ERC/DRC replacement."),
             {},
             lambda: run_all_checks(payload),
         ),
@@ -159,14 +160,14 @@ def _tool_table(
             lambda query: graph_api.search_all_boards(workspace_payloads, names, query),
         )
         table["list_board_links"] = (
-            "Board-to-board connector links: confirmed ones are traversable facts; "
-            "proposed ones are AI hypotheses awaiting human confirmation -- say which is which.",
+            ("Board-to-board connector links: confirmed ones are traversable facts; "
+             "proposed ones are AI hypotheses awaiting human confirmation -- say which is which."),
             {},
             lambda: graph_api.list_board_links(all_mates or [], names),
         )
         table["cross_board_path"] = (
-            "Electrical path between components on DIFFERENT boards, via human-confirmed "
-            "connector links only.",
+            ("Electrical path between components on DIFFERENT boards, via human-confirmed "
+             "connector links only."),
             {
                 "ref_a": ("string", "component ref on the first board"),
                 "board_a": ("string", "first board's name"),
@@ -329,7 +330,7 @@ def chat_turn(
                 _desc, _params, fn = table[call.name]
                 try:
                     result = fn(**args)
-                except Exception as exc:  # noqa: BLE001 -- tool bug shouldn't kill the turn
+                except Exception as exc:
                     result = {"error": f"tool failed: {exc}"}
                 arg_str = ", ".join(str(v) for v in args.values())
                 tool_trace.append(f"{call.name}({arg_str})")

@@ -31,9 +31,18 @@ def _store(tmp_path: Path) -> ChatMemoryStore:
 
 
 def _seed(store: ChatMemoryStore) -> None:
-    store.store("s1", "boardA", "what voltage can U6 measure?", "0 to 26 V per datasheet.", ["get_datasheet(U6)"])
-    store.store("s1", "boardA", "how does the ESP32 drive the motor?", "Via the TB6612 driver.", ["path_between(M3, TB1)"])
-    store.store("s2", "boardB", "which UART pins go to the header?", "TX/RX on P1.", ["get_net(U0TX)"])
+    store.store(
+        "s1", "boardA", "what voltage can U6 measure?",
+        "0 to 26 V per datasheet.", ["get_datasheet(U6)"],
+    )
+    store.store(
+        "s1", "boardA", "how does the ESP32 drive the motor?",
+        "Via the TB6612 driver.", ["path_between(M3, TB1)"],
+    )
+    store.store(
+        "s2", "boardB", "which UART pins go to the header?",
+        "TX/RX on P1.", ["get_net(U0TX)"],
+    )
 
 
 def test_semantic_recall_ranks_synonym_phrasing_first(tmp_path):
