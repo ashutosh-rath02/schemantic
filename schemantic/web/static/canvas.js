@@ -491,6 +491,14 @@ function renderOverview() {
       <span class="hint">Pin tables, buses, rails, datasheet links — drop it into a firmware repo
       so a coding agent knows what's actually wired where.</span>
     </div>
+    <div class="panel-section" id="design-checks-section">
+      <h3>Pre-fab checks <button class="btn" id="run-checks-btn" style="float:right; font-size:11px; padding:3px 9px;">Run</button></h3>
+      <p class="hint">Missing I2C pull-ups, floating enable pins, unidentified controllers, rail
+      mismatches. Mechanical findings come from verified connectivity; heuristic findings lean on
+      AI part identity. Not an ERC/DRC replacement — no CAD project to check against, this is what
+      a schematic PDF alone can support.</p>
+      <div id="design-checks-results"></div>
+    </div>
     ${regions.map(([name, info]) => `
       <div class="panel-section overview-region" data-region="${esc(name)}">
         <h3>${esc(name)} <span class="hint">${counts[name] || 0} components</span></h3>
@@ -630,7 +638,40 @@ function renderNetPanel(key) {
   `;
 }
 
+async function runDesignChecks(btn) {
+  btn.textContent = "Checking…";
+  btn.disabled = true;
+  const out = document.getElementById("design-checks-results");
+  try {
+    const res = await fetch("/api/design-checks");
+    const data = await res.json();
+    if (!data.findings.length) {
+      out.innerHTML = '<p class="hint" style="color:var(--green);">No findings — nothing the mechanical or heuristic checks flagged.</p>';
+    } else {
+      out.innerHTML = `
+        <p style="font-size:12px; margin:6px 0;">${data.counts.warn || 0} warn · ${data.counts.info || 0} info</p>
+        ${data.findings.map((f) => `
+          <div class="finding-card finding-${f.severity}">
+            <span class="badge ${f.tier === "mechanical" ? "badge-verified" : "badge-inferred"}">${f.tier}</span>
+            <span class="badge">${f.severity}</span>
+            <p style="font-size:12.5px; margin:6px 0 4px;">${esc(f.message)}</p>
+            ${f.members.length ? `<div class="peer-chips">${f.members.map((m) => {
+              const c = resolveRef(m);
+              return c ? `<span class="chip" data-comp="${esc(c.ref_token)}">${esc(m)}</span>` : "";
+            }).join("")}</div>` : ""}
+          </div>`).join("")}`;
+    }
+  } catch {
+    out.innerHTML = '<p class="hint">Check failed to run.</p>';
+  } finally {
+    btn.textContent = "Run";
+    btn.disabled = false;
+  }
+}
+
 panel.addEventListener("click", (e) => {
+  const checksBtn = e.target.closest("#run-checks-btn");
+  if (checksBtn) { runDesignChecks(checksBtn); return; }
   const proposeBtn = e.target.closest("#propose-mates-btn");
   if (proposeBtn) { proposeMates(proposeBtn); return; }
   const mateBtn = e.target.closest("[data-mate]");

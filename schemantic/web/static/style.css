@@ -603,3 +603,13 @@ a { color: var(--blue); }
   font-size: 12px;
   margin-top: 6px;
 }
+
+.finding-card {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-top: 8px;
+}
+.finding-card.finding-warn { border-left: 3px solid var(--amber); }
+.finding-card.finding-info { border-left: 3px solid var(--text-faint); }
