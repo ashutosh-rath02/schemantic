@@ -303,6 +303,23 @@ def chat_turn(
     if recalled_count:
         tool_trace.append(f"semantic_recall({recalled_count} past)")
 
+    # Observed live, reproducibly: the model sometimes emits a text-only
+    # first response that ANNOUNCES an intent to search ("I will retry with
+    # related terms...") without calling any tool at all -- an ungrounded
+    # reply slipping past a purely prompt-based instruction, which the
+    # architecture is supposed to make structurally impossible. Worse: that
+    # reply was being stored in semantic memory, then recalled on the next
+    # attempt, so the model saw its own prior non-answer as "similar past
+    # context" and repeated it -- a self-reinforcing failure compounding
+    # across calls, confirmed by three consecutive identical repro attempts
+    # against the deployed server. Two structural fixes, not prompt tweaks:
+    #   1. a zero-tool-call first response gets ONE forced retry with an
+    #      explicit corrective instruction, not accepted immediately.
+    #   2. memory only stores a reply if a real tool actually ran this turn
+    #      -- an ungrounded reply can never be memorized and re-surfaced.
+    tools_ever_called = False
+    nudged = False
+
     with supervisor.stage("chat"):
         for _ in range(MAX_TOOL_ITERATIONS):
             response = client.responses.parse(
@@ -315,15 +332,27 @@ def chat_turn(
 
             calls = [item for item in response.output if item.type == "function_call"]
             if not calls:
+                if not tools_ever_called and not nudged:
+                    nudged = True
+                    input_items.append(
+                        {
+                            "role": "system",
+                            "content": "You did not call any tool. Do not describe what you "
+                            "would search for -- actually call search_components or another "
+                            "tool now, before answering.",
+                        }
+                    )
+                    continue
                 reply = response.output_parsed
                 if reply is None:  # model emitted neither tools nor parseable text
                     reply = ChatReply(answer="I couldn't produce an answer for that -- try rephrasing.")
                 session.remember({"role": "assistant", "content": reply.answer})
-                if memory is not None and reply.answer:
+                if memory is not None and reply.answer and tools_ever_called:
                     memory.store(
                         session.session_id, board_name, user_message, reply.answer, tool_trace
                     )
                 return reply, tool_trace
+            tools_ever_called = True
 
             for call in calls:
                 args = json.loads(call.arguments)
