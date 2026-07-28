@@ -1,188 +1,210 @@
 # Schemantic
 
-Turns an EDA-exported schematic PDF into something actually understood, not just redrawn: real
-component connections, real part identities, and plain-English explanations of what each
-subcircuit does — rendered as its own interactive infinite canvas (pan/zoom) built from the
-connectivity graph. Click a component and everything it's wired to lights up, with the
-connections traced; click a wire and every component on that net highlights.
+**A multi-agent system that turns a circuit board's schematic PDF into something actually
+understood** — a live connectivity graph, AI-identified parts with page-cited datasheet facts, a
+grounded chat agent that reasons over the verified graph, and exports a coding agent can build
+firmware from. Not a redraw: every wire you see is parsed fact, not a guess.
 
-## What problem this solves
+![Chat agent tracing a real signal path across six nets, with semantic memory recalling a related past exchange](docs/screenshot-chat.png)
 
-A schematic PDF is a wall of reference designators and wires. Someone unfamiliar with the board
-can see that `U6` connects to `IIC_SDA`, but not *what U6 is*, *what package it's in*, or *what
-this whole corner of the board is for*. Schemantic answers those questions: click any component
-and see what it actually is (with links to check the real part), and click any net to trace exactly
-what it's wired to on the canvas.
+## Why this exists
 
-## How it works — deterministic core, AI layer on top
+A schematic PDF is a wall of reference designators and wires. Someone unfamiliar with a board —
+a firmware engineer picking up a vendor reference design, an intern debugging someone else's
+project — can see that `U6` connects to something called `IIC_SDA`, but not *what U6 is*, *what
+else is on that bus*, or *what this whole corner of the board does*. Getting those answers today
+means hours of squinting at the PDF plus a dozen datasheet tabs.
 
-The most important design decision here: **never let the model guess at something that can be
-proven mechanically.**
+Schemantic answers those questions directly: click any component to see what it actually is, ask
+the board a question in plain English, or export everything as a hardware map a coding agent can
+use to write real firmware against real, verified pins.
 
-1. **Netlist extraction (deterministic, zero AI).** Altium Designer's PDF exports embed invisible text
-   objects at every pin and component location — `PI<refdes><pin>`, `CO<refdes>`, `NL<netname>` —
-   for interactive net-highlighting in a PDF viewer. `schemantic/parser/netlist.py` parses these
-   directly from the PDF's text layer. Every component, pin, and net connection is read straight
-   from the document, not inferred — verified by hand against the real schematic (see
-   `tests/test_netlist_parser.py`, e.g. U6's SDA pin lands on the IIC_SDA bus exactly as drawn, and
-   the IMU has exactly the 24 pins its real QFN-24 package has).
-2. **Part identification (AI, narrow scope).** `schemantic/agents/part_identity.py` identifies what
-   each component actually is — but generic passives (resistors, capacitors, inductors) never hit
-   the model at all; there's nothing to identify, a 0402 resistor looks like every other 0402
-   resistor. Only ICs, connectors, and named transistors go through the agent (54 of 146 components
-   on the reference board). Every identification ships with its reasoning, a confidence score, and
-   deterministic search links (Octopart/LCSC/Digi-Key/datasheet) so a guess is always one click from
-   being checked against the real part — this is not a verified fact the way the netlist is.
-3. **Region explanation (AI, one call per region).** `schemantic/agents/region_explainer.py` explains
-   what each labeled subcircuit (the designer's own "POWER," "LIDAR," "Motor" boxes) actually does,
+## What it does
+
+- **Understands any Altium-exported schematic PDF or KiCad project** — no CAD software, no
+  original project file required for the PDF path. Verified on three independently-sourced boards
+  from two different vendors and two different EDA tools.
+- **Renders its own interactive canvas** — pan/zoom, component bodies sized from real pin
+  geometry, wires as real per-net connectivity. Click a component, everything it's wired to lights
+  up with the path traced; click a wire, every component on that net highlights.
+- **Identifies parts with evidence, not vibes** — every AI guess ships with its reasoning, a
+  confidence score, and one-click links to check it against the real part. Generic passives never
+  touch the model at all — there's nothing to identify.
+- **Fetches and quotes real datasheets** — facts are extracted with a verbatim quote and page
+  number, then mechanically re-checked against the actual PDF page. A quote that doesn't match is
+  dropped, never shown. Full-document search answers arbitrary spec questions beyond the initial
+  digest.
+- **Answers questions about the board in chat**, grounded entirely in tool calls over the verified
+  graph — never model recall — with **persistent semantic memory** (SQLite + embeddings) so a
+  reworded question weeks later still finds the original answer, across restarts.
+- **Links multiple boards** — an agent proposes which connectors on a master/slave pair likely
+  mate, with pin-level evidence; a human confirms or rejects each one; only confirmed links become
+  traversable in cross-board questions.
+- **Exports a Hardware Map** (`.md`/`.json`) — pin tables, bus inventories, power rails, datasheet
+  links — built for handing to a coding agent so it can write firmware against real, verified
+  pins instead of guessing.
+- **Generates starter firmware** — a pin-definitions header and demo scaffold grounded in the
+  hardware map, with `TODO` markers instead of invented values wherever the map genuinely doesn't
+  know something.
+- **Flags pre-fabrication issues** — missing I2C pull-ups, floating enable pins, unidentified
+  controllers, supply-rail mismatches — split into mechanical (verified-connectivity-derived) and
+  heuristic (AI-identity-derived) tiers, each labeled as such.
+
+## See it work
+
+![Component selected, connected nets traced in matching colors, AI identity with confidence and datasheet facts in the side panel](docs/screenshot-canvas.png)
+
+## Architecture — deterministic core, AI agents on top
+
+The rule that shaped every decision in this codebase: **never let a model guess at something that
+can be proven mechanically.**
+
+```
+Schematic PDF / KiCad project
+        │
+        ▼
+┌───────────────────┐   deterministic — no AI, hand-verified against real boards
+│  Parser            │   Altium's embedded netlist tokens, or KiCad .net/.kicad_pcb
+│  Graph + geometry   │   MST wire routing, power-rail classification, pin bounding boxes
+└─────────┬──────────┘
+          ▼
+┌───────────────────────────────────────────────────────────┐  AI agents, narrowly scoped,
+│  Part Identity  │  Region Explainer  │  Datasheet Digest    │  every output verifiable
+│  (skips passives) │ (per section)    │  (quote + page cite)  │  against a mechanical check
+└─────────┬─────────────────┬──────────────────┬─────────────┘
+          ▼                 ▼                  ▼
+   ┌─────────────────────────────────────────────────┐
+   │  Supervisor -- cost budgets, spend tracking,     │
+   │  thread-safe, hard caps on every model call      │
+   └─────────────────────────────────────────────────┘
+          │
+          ▼
+┌────────────────────────────────────────────────────────────────────┐
+│  Graph API (tool layer, zero AI)  →  Chat Agent (tool-calling, memory) │
+│  Mate Proposer (human-gated)      →  Hardware Map / Firmware Starter   │
+│  Design Checks (mechanical + heuristic, tier-labeled)                 │
+└────────────────────────────────────────────────────────────────────┘
+          │
+          ▼
+   Interactive canvas · grounded chat · exports for a coding agent
+```
+
+1. **Netlist extraction (deterministic).** Altium's PDF export embeds invisible text at every pin
+   and component location — `PI<refdes><pin>`, `CO<refdes>`, `NL<netname>` — meant for interactive
+   net-highlighting in a PDF viewer. `schemantic/parser/netlist.py` reads it directly. Every
+   connection is parsed fact, verified by hand against real schematics (e.g., a sensor's SDA pin
+   lands on the SDA bus exactly as drawn; an IMU has exactly the pin count its real package has).
+2. **Part identification (AI, narrow scope).** Generic resistors/capacitors never reach the model
+   — nothing to identify. Only ICs, connectors, and named transistors go through
+   `schemantic/agents/part_identity.py`, each result carrying reasoning, confidence, and
+   deterministic search links.
+3. **Region explanation (AI).** Plain-English summaries of what each labeled subcircuit does,
    grounded only in the parts identified within it.
-3.5. **Graph + geometry (deterministic).** `schemantic/graph.py` turns the parse into the drawable
-   connectivity graph: component bodies sized from their real pin bounds, and per-net wires as a
-   minimum spanning tree over the net's actual pin coordinates. The honest contract: topology is
-   exact (every drawn segment connects electrically-connected pins, every pin is reachable —
-   enforced by `tests/test_graph.py`), while the specific line paths are synthetic, not the
-   original drawn routes. Power rails (GND touches all 146 components) are hidden by default and
-   render only when explicitly selected, so signal wiring stays readable.
-4. **Supervisor.** Every model call runs through `schemantic/supervisor/core.py` — cost budget,
-   per-stage spend tracking, thread-safe (identification runs concurrently across a
-   `ThreadPoolExecutor`). Full run against the 146-component reference board: **54 model calls,
-   $0.07, ~55 seconds.**
-5. **Datasheet grounding (AI extracts, mechanics verify).** For every confidently-identified
-   part, `schemantic/datasheets.py` locates and fetches the real datasheet (TI's documented URL
-   pattern first, then a web search that in testing surfaced manufacturers' own PDFs; LCSC's and
-   EasyEDA's part APIs were probed and are 403-blocked — absent deliberately, not overlooked).
-   `schemantic/agents/datasheet_digest.py` then extracts up to 8 facts, each carrying a VERBATIM
-   quote and page number — and every quote is mechanically re-checked against the cited page of
-   the fetched PDF. Facts that fail verification are dropped and counted, never displayed. This is
-   the structural fix for the "9-axis that was actually 6-axis" class of error: spec numbers now
-   come from the document, with the quote and page shown, or they don't come at all. Datasheets
-   cache globally by part number, so a board with three of the same chip fetches once.
-6. **Multi-board workspaces (AI proposes, human confirms, graph traverses).** Board-to-board
-   connections exist in *neither* schematic — which connector mates with which is a physical
-   harness decision. So `schemantic/agents/mate_proposer.py` proposes candidate matings with
-   pin-level evidence (GND↔GND, SDA↔SDA, TX↔RX), every proposal is mechanically validated
-   against the real connectors before storage (`schemantic/workspace.py` — one wrong pin/net
-   reference discards the whole proposal), and **only human-confirmed links become traversable
-   edges**. Verified live across the two reference boards: 9 proposals stored with 0 validation
-   failures; after confirming the I2C expansion link (P3↔P1), the chat correctly traced
-   "U6 on board A → I2C bus → [P3↔P1 link] → board B's I2C bus → through the level shifter →
-   the IMU" — a real cross-board electrical path through the confirmed connector only.
-7. **"Ask the board" chat (AI, grounded by construction).** `schemantic/agents/chat.py` +
-   `schemantic/graph_api.py`: a tool-calling agent that can only answer through deterministic
-   queries over the parsed graph (`search_components`, `get_connections`, `path_between`, …), so
-   every connectivity claim it makes is one the netlist computed — never model recall. Every
-   answer shows its provenance ("checked: get_connections(U6)") in the UI, carries structured
-   canvas commands (highlight/trace/fly-to) instead of prose parsing, keeps per-session
-   conversation memory so follow-ups like "what is *it* connected to?" resolve, and is capped by
-   per-message tool-loop limits plus a server-level spend budget. When the graph has no answer it
-   says so — verified: asked "where is the IMU?", it searched "IMU", found nothing, retried
-   "inertial", found U1, and disclosed the identification as an AI guess with its confidence.
-   Conversations persist in **semantic memory** (`schemantic/chat_memory.py`): every exchange is
-   stored in SQLite with an embedding, and each new question is cosine-matched against everything
-   stored — so a reworded question weeks later ("up to how many volts can the current sensor
-   monitor?") recalls the original answer ("what bus voltage range can U6 measure?") across
-   server restarts and sessions. Recalled exchanges are injected as clearly-marked, possibly-stale
-   context — the agent still re-verifies with tools, because board state may have changed since.
-   Deliberate right-sizing: SQLite + exact cosine, not a vector database — at chat scale
-   (thousands of exchanges), exact search is milliseconds; the semantic power is the embeddings,
-   not the storage engine. The browser's localStorage is only a display cache; the system of
-   record is the server store, and an empty cache rebuilds the transcript from it.
+4. **Graph + geometry (deterministic).** The parse becomes a drawable connectivity graph: real pin
+   bounding boxes, and per-net wires as a minimum spanning tree over real pin coordinates. Topology
+   is exact and test-enforced; the specific wire *paths* are synthetic, not the original routes —
+   stated plainly, not glossed over.
+5. **Datasheet grounding (AI extracts, mechanics verify).** Every fact ships with a verbatim quote
+   and page number; the quote is re-checked against the actual fetched PDF page, and anything that
+   fails is dropped and counted, never shown.
+6. **Multi-board workspaces (AI proposes, human confirms).** Connector matings can't be parsed —
+   they're physical harness decisions in neither schematic — so an agent proposes candidates with
+   pin-level evidence, every proposal is mechanically validated against the real connectors before
+   storage, and only human-confirmed links become traversable.
+7. **Chat agent (tool-calling, grounded, with memory).** Can only answer through deterministic
+   tool calls over the parsed graph — every claim traces to a query, shown in the UI as
+   provenance. Persistent semantic memory means conversations survive restarts and reworded
+   questions still find prior answers.
+8. **Supervisor.** Every model call anywhere in the system runs through a thread-safe cost-budget
+   layer with hard spend caps — no agent, however deep in a tool loop, can run unmetered.
 
-## Honesty notes — real limitations found and either fixed or documented
+## Built and verified across three real, independently-sourced boards
 
-- **Region assignment is a heuristic, not a fact.** Components are assigned to the nearest labeled
-  section title by on-page distance. Tried making this more "sophisticated" with divider-line
-  blocking — it fixed one boundary error and broke several others (a divider near a large
-  component's own edge wrongly blocked it from its own section). Reverted to plain nearest-neighbor,
-  which measured 145/146 correct by hand. Surfaced as inferred in the UI, not asserted as fact.
-- **Two real bugs found during verification, both fixed:** a loose substring check for component
-  values matched a nearby section title ("10-DOF-IMU-Sensor-D") as a capacitor value because "M" is
-  a substring of "IMU"; and about half of all passives on this board have more than one
-  value-shaped label within radius, so naive nearest-text picked up a neighboring component's value
-  around 50% of the time. Both are covered by regression tests now.
-- **The model is sometimes wrong, and says so.** One identification (`M1`) reasoned through a real
-  pin-count contradiction — it assumed a mentioned part number implied a 3-pin package, when the
-  actual pin count was 8 — and correctly landed on lower confidence (60%) instead of asserting a
-  wrong answer confidently. That's the system working as designed: every guess ships with its
-  reasoning and a way to check it, not just a bare answer.
+| | Board 1 (Altium PDF) | Board 2 (Altium PDF) | Board 3 (KiCad project) |
+|---|---|---|---|
+| Source | Waveshare ROS Driver | Waveshare General Driver | Olimex ESP32-PoE |
+| Components | 146 | 149 | 135 |
+| Nets | 72 | 74 | 125 |
+| Parts identified | INA219, ICM-20948, TB6612FNG, ESP32... | QMI8658C, CP2102N... (different parts, same pipeline) | TPS2375 PoE controller, LAN8710A PHY, CH340T |
+
+The second and third boards needed **zero parser code changes** — the whole point of building on a
+deterministic core.
+
+## Honesty log — real bugs found by reading actual output, not assumed away
+
+This is the part of the codebase I'm most willing to defend under questioning. A running list of
+mistakes caught by actually inspecting live output against ground truth, and exactly how each was
+fixed:
+
+- **A schema-ordering bug that let a model contradict itself.** Early on, a verdict field was
+  requested before the reasoning meant to justify it — structured-output APIs fill fields in
+  declaration order, so the model was committing to an answer before thinking it through. Fixed by
+  putting reasoning first everywhere in the schema.
+- **A substring-matching bug mistook a section title for a component value** (`10-DOF-IMU-Sensor-D`
+  matched as a capacitor value because `M` is a substring of `IMU`). Fixed with a proper anchored
+  pattern; regression-tested.
+- **A naive "any power rail counts as a pull-up" check would have missed I2C buses with only a
+  pull-*down* to GND** — caught by reading the actual resistor-to-net mapping on a real board (one
+  resistor really was GND-tied, for an unrelated reason) before trusting the check's silence.
+- **A voltage-range check false-flagged the board's own microcontroller** — its datasheet says
+  "3.0 to 3.6 V," but substring-matching only caught the upper bound "3.6," which doesn't textually
+  appear in a "3V3" rail name even though 3.3V is well inside the real range. Fixed with actual
+  numeric range containment.
+- **The netlist format was misattributed to EasyEDA by assumption.** Checking PDF creator metadata
+  across every sample settled it: every token-carrying PDF says `creator='Altium Designer'`.
+  Corrected everywhere, including error messages users see.
+- **A stricter token filter (fixing a KiCad false-positive) silently exposed a day-one bug**: an
+  active-low enable net's token had been rejected by an overly loose check since the very first
+  version, silently merging its pins into an unrelated net. Both reference boards were
+  re-verified and locked in with regression tests after the fix.
+
+Every one of these was found by generating real output and reading it critically, not by
+assuming the pipeline was correct — and each fix is now guarded by a test that reproduces the
+original failure.
+
+## Tech stack
+
+Python · FastAPI · OpenAI (structured outputs, tool-calling, embeddings) · SQLite (semantic vector
+memory) · PyMuPDF · vanilla JS + SVG (the canvas — no framework, no build step) · pytest (81 tests,
+almost all running against real enriched board data, not mocks)
 
 ## Run it
 
 ```bash
-# .env with OPENAI_API_KEY must exist in the project root
+# .env with OPENAI_API_KEY must exist in the project root (see .env.example)
 python -m venv .venv
 ./.venv/Scripts/pip install -e ".[dev]"
-./.venv/Scripts/pytest -q                              # parser regression suite
+./.venv/Scripts/pytest -q
 ./.venv/Scripts/python -m uvicorn schemantic.web.app:app --reload
 ```
 
-Open http://127.0.0.1:8000/. First load runs the full pipeline (~55s, ~$0.07 against the reference
-board) and caches the result to `.cache/`; subsequent loads are instant. Delete `.cache/` to force a
-fresh run.
-
-## Generalization — tested on a second board
-
-Any Altium-exported schematic PDF can be uploaded through the UI ("Analyze a PDF"); results cache by
-content hash. Verified against a second, independently downloaded board (Waveshare General Driver
-for Robots): the parser needed **zero code changes** (149 components / 73 nets extracted), and the
-part-identity agent correctly identified that board's different parts — QMI8658C IMU vs the first
-board's ICM-20948, CP2102N USB-UART vs CH343P — at 95% confidence. Two imperfections were found
-and both led to real fixes:
-
-- The model described the QMI8658C as "9-axis" (it's 6-axis) — part number grounded in schematic
-  text, but the spec number recalled from parametric memory, which is exactly where LLMs
-  confabulate. The identity prompt now forbids numeric specs unless the number appears in the
-  provided context, and a **mechanical** cross-check (no AI) flags any claimed package whose pin
-  count contradicts the netlist-parsed pin count.
-- Region grouping initially forced every component into *some* section. Diagnosis showed the
-  second board genuinely draws no title over parts of its area (its captions there are the same
-  font size as part numbers, so no font threshold can separate them). Components whose area has no
-  reachable title are now honestly reported as "unlabeled" rather than assigned the nearest wrong
-  section — 39 of 149 on that board, and, correctly, the two title-less RPi/Jetson headers on the
-  reference board.
-
-Uploading an unsupported PDF fails with an explicit message naming the PDF's creator tool, not a
-crash — verified against a real KiCad (Eeschema) export and a schematic image pasted into a word
-processor, both downloaded from their vendors, both in `tests/test_unsupported_pdfs.py`.
-
-**Format provenance, corrected by evidence:** the token scheme was originally attributed to
-EasyEDA by guess. Checking PDF creator metadata across all samples settled it — every
-token-carrying PDF says `creator='Altium Designer'`; the KiCad export has no tokens. The docs, the
-error messages, and this README were corrected accordingly. Bonus find from the same
-investigation: tightening the token charset exposed a latent day-one bug where the `#EN` net's
-token was silently rejected and its five pins merged into a neighboring net. Both reference
-boards re-verified after the fix (72 and 74 nets), with regression tests locking the corrected
-grouping.
-
-## KiCad native ingestion
-
-KiCad's PDF export embeds no netlist (verified) — but its *source files* are plain s-expressions,
-so KiCad support takes the honest route: parse the sources, no computer vision. Upload a `.net`
-netlist export (or a `.zip` with the `.kicad_pcb` alongside) and the same pipeline runs: the
-netlist gives authoritative connectivity, the PCB file gives **real physical pad placement** (the
-canvas shows the actual board layout), and component values from the netlist feed the same
-identity/datasheet enrichment. Verified against Olimex's real ESP32-PoE project. Boards without a
-PCB file fall back to a synthetic grid — topology identical, layout approximate and said so.
-
-## Coding-agent bridge: Hardware Map + full-datasheet search
-
-- **Export hardware map** (button on the board overview): controller pin tables (pin → net → what's
-  on the other end), bus inventories, power rails (voltages name-derived and flagged as such),
-  connector pinouts, confirmed board links, datasheet URLs with verified facts — as `.md` for
-  prompt context or `.json` for tooling. Deterministic assembly; drop it into a firmware repo so a
-  coding agent knows what's actually wired where.
-- **Any-parameter datasheet answers**: beyond the digest's verified facts, the chat can search the
-  entire cached datasheet PDF (`search_datasheet`) and answer with verbatim passages and page
-  numbers — verified live: asked for the ICM-20948's I2C address (not in any digest) and got the
-  correct 0x68/0x69-by-AD0 answer quoted from page 28.
+Open http://127.0.0.1:8000/. First load runs the full pipeline (~1 min, a few cents against a new
+board) and caches by content hash; every later load is instant. Upload any Altium PDF or KiCad
+`.net`/`.zip` via "Analyze a board."
 
 ## Not yet built
 
-- Eagle/OrCAD support, and KiCad *PDF* exports (no embedded netlist; sources are the supported
-  route). Scanned schematics still need the computer-vision path.
-- Schematic → starter firmware generation, and schematic → pre-fabrication design checks — next
-  on the roadmap.
-- Scanned/rasterized schematics with no embedded text layer — that needs real computer-vision
-  symbol recognition, a fundamentally different (and much harder) problem than parsing structured
-  text, and out of scope for now.
+- Eagle/OrCAD support, and KiCad *PDF* exports specifically (no embedded netlist in KiCad's PDF —
+  the source-file route is what's supported).
+- Scanned/rasterized schematics with no embedded text layer — needs real computer-vision symbol
+  recognition, a fundamentally different problem, out of scope for now.
 - Multi-page schematics — the parser currently expects a single-page export.
+
+## Repo layout
+
+```
+schemantic/
+  parser/           deterministic PDF/KiCad → components, pins, nets
+  graph.py          connectivity graph + wire geometry (MST)
+  graph_api.py       tool layer the chat agent queries (zero AI)
+  agents/           part identity, region explainer, datasheet digest,
+                    chat, mate proposer, firmware starter
+  datasheets.py     fetch + mechanical quote verification
+  chat_memory.py    persistent semantic memory (SQLite + embeddings)
+  workspace.py      multi-board store, mechanical mate validation
+  design_checks.py  pre-fab checks, mechanical + heuristic tiers
+  hardwaremap.py    coding-agent export
+  supervisor/       cost budgets, thread-safe, hard caps
+  web/              FastAPI app + canvas UI (vanilla JS/SVG)
+tests/              81 tests, mostly against real enriched board payloads
+```
