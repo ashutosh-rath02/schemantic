@@ -16,7 +16,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "ruff>=0.5"]
+# Pinned to a range, not "latest" -- an unpinned ruff silently changed its
+# DEFAULT rule set between 0.15 and 0.16 (not just individual rule behavior),
+# which stripped noqa comments as "unused" and would have broken CI on the
+# next contributor's fresh install. Caught by actually simulating a clean
+# checkout before trusting the CI config, not assumed.
+dev = ["pytest>=8.0", "ruff>=0.16,<0.17"]
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -27,3 +32,20 @@ include = ["schemantic*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+# Explicit selection, not "whatever ruff defaults to this release" -- see
+# the dev-dependency comment above for why that distinction turned out to
+# matter in practice, not just in theory.
+#
+# PLW0602 (global-declared-but-unused) is opted in specifically, not the
+# whole PLW family: PLW0603 (global-statement) flags every legitimate use
+# of `global` too, which is a deliberate pattern here (module-level board/
+# session state in a small single-process app), not a defect -- confirmed
+# by checking what it actually flagged before excluding it.
+select = ["E", "F", "B", "I", "UP", "PIE", "ISC", "RUF"]
+extend-select = ["PLW0602"]
