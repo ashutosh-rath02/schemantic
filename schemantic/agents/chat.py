@@ -229,6 +229,7 @@ def _sync_active_board(session: ChatSession, board_name: str) -> None:
 @dataclass
 class ChatSession:
     session_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    project_id: str = ""
     board_file: str = ""
     items: list[dict] = field(default_factory=list)  # conversation memory
 
@@ -244,6 +245,7 @@ def chat_turn(
     payload: dict,
     client: OpenAI,
     supervisor: Supervisor,
+    project_id: str = "",
     workspace_payloads: dict[str, dict] | None = None,
     board_names: dict[str, str] | None = None,
     confirmed_mates: list[dict] | None = None,
@@ -276,7 +278,7 @@ def chat_turn(
     recall_note = ""
     recalled_count = 0
     if memory is not None:
-        hits = memory.recall(user_message)
+        hits = memory.recall(project_id, user_message)
         recalled_count = len(hits)
         if hits:
             lines = [
@@ -349,7 +351,8 @@ def chat_turn(
                 session.remember({"role": "assistant", "content": reply.answer})
                 if memory is not None and reply.answer and tools_ever_called:
                     memory.store(
-                        session.session_id, board_name, user_message, reply.answer, tool_trace
+                        project_id, session.session_id, board_name, user_message,
+                        reply.answer, tool_trace,
                     )
                 return reply, tool_trace
             tools_ever_called = True

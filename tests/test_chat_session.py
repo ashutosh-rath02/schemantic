@@ -18,6 +18,11 @@ def test_sessions_have_distinct_ids():
     assert ChatSession().session_id != ChatSession().session_id
 
 
+def test_session_carries_project_id():
+    assert ChatSession().project_id == ""
+    assert ChatSession(project_id="proj_abc123").project_id == "proj_abc123"
+
+
 def test_board_switch_keeps_memory_and_adds_marker():
     # Switching the active board must NOT wipe the conversation (it did,
     # observed as "chat is lost" once the workspace made switching routine).
