@@ -7,6 +7,10 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const svg = document.getElementById("schematic-svg");
 const panel = document.getElementById("side-panel");
 
+// every API/upload/image route is project-scoped; PROJECT_ID is emitted as
+// a global by the template before this script loads
+function api(path) { return `/p/${PROJECT_ID}${path}`; }
+
 // ---- persistence (localStorage; board switches are full reloads, so all
 // UI state that should survive them lives here) ----
 function stGet(key, fallback) {
@@ -19,7 +23,11 @@ function stSet(key, value) {
   try { localStorage.setItem("schemantic." + key, JSON.stringify(value)); } catch { /* full/blocked */ }
 }
 let activeBoardId = null;  // set once workspace info arrives
-function boardKey(suffix) { return `board.${activeBoardId || "default"}.${suffix}`; }
+// board ids are global content hashes (same PDF, two projects -> same id),
+// so board-scoped state must ALSO carry the project id or it collides
+// across projects sharing the same uploaded file
+function boardKey(suffix) { return `project.${PROJECT_ID}.board.${activeBoardId || "default"}.${suffix}`; }
+function chatKey(suffix) { return `project.${PROJECT_ID}.chat.${suffix}`; }
 
 // distinct hues for a selected component's nets, so you can tell which
 // wire is which; assigned per selection, mirrored as dots in the panel
@@ -111,11 +119,11 @@ function zoomCenter(factor) {
 let workspaceInfo = { boards: [], mates: [] };
 
 async function init() {
-  const res = await fetch("/api/schematic");
+  const res = await fetch(api("/api/schematic"));
   schematic = await res.json();
   comps = Object.fromEntries(schematic.components.map((c) => [c.ref_token, c]));
   try {
-    workspaceInfo = await (await fetch("/api/workspace")).json();
+    workspaceInfo = await (await fetch(api("/api/workspace"))).json();
   } catch { /* workspace optional */ }
   const active = workspaceInfo.boards.find((b) => b.active);
   activeBoardId = active ? active.id : null;
@@ -483,9 +491,9 @@ function renderOverview() {
       <div class="panel-title">Board overview</div>
       <div class="panel-sub">${schematic.components.length} components · ${Object.keys(schematic.nets).length} nets · click a section to zoom to it</div>
       <div class="link-row" style="margin-top:8px;">
-        <a class="link-btn" href="/api/hardwaremap" download>Export hardware map (.md)</a>
-        <a class="link-btn" href="/api/hardwaremap?format=json" target="_blank" rel="noopener">.json</a>
-        <a class="link-btn" href="/api/firmware-starter" download
+        <a class="link-btn" href="${api("/api/hardwaremap")}" download>Export hardware map (.md)</a>
+        <a class="link-btn" href="${api("/api/hardwaremap?format=json")}" target="_blank" rel="noopener">.json</a>
+        <a class="link-btn" href="${api("/api/firmware-starter")}" download
            title="Pin header + demo sketch generated from the map -- ~30s, a starting point, not production">Starter firmware (.zip)</a>
       </div>
       <span class="hint">Pin tables, buses, rails, datasheet links -- drop it into a firmware repo
@@ -643,7 +651,7 @@ async function runDesignChecks(btn) {
   btn.disabled = true;
   const out = document.getElementById("design-checks-results");
   try {
-    const res = await fetch("/api/design-checks");
+    const res = await fetch(api("/api/design-checks"));
     const data = await res.json();
     if (!data.findings.length) {
       out.innerHTML = '<p class="hint" style="color:var(--green);">No findings -- nothing the mechanical or heuristic checks flagged.</p>';
@@ -707,23 +715,23 @@ function renderBoardSwitcher() {
   ).join("");
   el.querySelectorAll("[data-board]").forEach((chip) => {
     chip.onclick = async () => {
-      await fetch("/api/workspace/switch", {
+      await fetch(api("/api/workspace/switch"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ board_id: chip.dataset.board }),
       });
-      location.href = "/";  // full reload: new payload, new canvas
+      location.href = `/p/${PROJECT_ID}/`;  // full reload: new payload, new canvas
     };
   });
 }
 
 async function decideMate(mateId, status) {
-  await fetch(`/api/mates/${mateId}`, {
+  await fetch(api(`/api/mates/${mateId}`), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status }),
   });
-  workspaceInfo = await (await fetch("/api/workspace")).json();
+  workspaceInfo = await (await fetch(api("/api/workspace"))).json();
   renderOverview();
 }
 
@@ -731,9 +739,9 @@ async function proposeMates(btn) {
   btn.textContent = "Analyzing connectors… (~30s)";
   btn.disabled = true;
   try {
-    const res = await fetch("/api/workspace/propose-mates", { method: "POST" });
+    const res = await fetch(api("/api/workspace/propose-mates"), { method: "POST" });
     const data = await res.json();
-    workspaceInfo = await (await fetch("/api/workspace")).json();
+    workspaceInfo = await (await fetch(api("/api/workspace"))).json();
     renderOverview();
     if (data.error) alert(data.error);
   } catch {
@@ -815,8 +823,8 @@ function renderRegionChips() {
 // conversation memory keyed by session id, so surviving a reload (board
 // switches are reloads) keeps both the visible transcript AND the agent's
 // memory of it.
-let chatSessionId = stGet("chat.sessionId", null);
-let chatLog = stGet("chat.log", []);  // [{cls, html}], final messages only
+let chatSessionId = stGet(chatKey("sessionId"), null);
+let chatLog = stGet(chatKey("log"), []);  // [{cls, html}], final messages only
 const CHAT_LOG_MAX = 40;
 let chatBusy = false;
 
@@ -826,10 +834,10 @@ const chatInput = document.getElementById("chat-input");
 const chatSend = document.getElementById("chat-send");
 
 const chatDrawer = document.getElementById("chat-drawer");
-if (stGet("chat.collapsed", false)) chatDrawer.classList.add("collapsed");
+if (stGet(chatKey("collapsed"), false)) chatDrawer.classList.add("collapsed");
 document.getElementById("chat-toggle").addEventListener("click", () => {
   chatDrawer.classList.toggle("collapsed");
-  stSet("chat.collapsed", chatDrawer.classList.contains("collapsed"));
+  stSet(chatKey("collapsed"), chatDrawer.classList.contains("collapsed"));
 });
 
 function addChatMsg(cls, html, persist = false) {
@@ -841,7 +849,7 @@ function addChatMsg(cls, html, persist = false) {
   if (persist) {
     chatLog.push({ cls, html });
     if (chatLog.length > CHAT_LOG_MAX) chatLog = chatLog.slice(-CHAT_LOG_MAX);
-    stSet("chat.log", chatLog);
+    stSet(chatKey("log"), chatLog);
   }
   return div;
 }
@@ -861,7 +869,7 @@ async function restoreTranscript() {
     chatLog.forEach(renderChatEntry);
   } else if (chatSessionId) {
     try {
-      const res = await fetch(`/api/chat/history?session_id=${encodeURIComponent(chatSessionId)}`);
+      const res = await fetch(api(`/api/chat/history?session_id=${encodeURIComponent(chatSessionId)}`));
       const data = await res.json();
       for (const ex of data.exchanges || []) {
         const q = { cls: "chat-msg-user", html: esc(ex.question) };
@@ -871,7 +879,7 @@ async function restoreTranscript() {
         chatLog.push(q, a);
         renderChatEntry(q); renderChatEntry(a);
       }
-      if (chatLog.length) stSet("chat.log", chatLog);
+      if (chatLog.length) stSet(chatKey("log"), chatLog);
     } catch { /* history unavailable -- start fresh */ }
   }
   if (chatLog.length) chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -917,7 +925,7 @@ async function sendChat(message) {
   addChatMsg("chat-msg-user", esc(message), true);
   const thinking = addChatMsg("chat-msg-bot chat-thinking", "checking the graph…");
   try {
-    const res = await fetch("/api/chat", {
+    const res = await fetch(api("/api/chat"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message, session_id: chatSessionId }),
@@ -929,7 +937,7 @@ async function sendChat(message) {
       return;
     }
     chatSessionId = data.session_id;
-    stSet("chat.sessionId", chatSessionId);
+    stSet(chatKey("sessionId"), chatSessionId);
     let html = esc(data.answer);
     if (data.highlight_refs && data.highlight_refs.length) {
       html += "<div>" + data.highlight_refs.map((r) => {

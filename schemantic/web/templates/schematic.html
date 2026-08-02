@@ -3,22 +3,29 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Schemantic</title>
+  <title>Schemantic{% if project_name %} -- {{ project_name }}{% endif %}</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+  <script>const PROJECT_ID = {{ project_id | tojson }};</script>
   <header class="site-header">
     <span class="logo">Schemantic</span>
-    <span class="tagline">{{ source_name }} -- understood, not just redrawn
-      <a href="/schematic-image" target="_blank" rel="noopener" class="original-link">view original</a>
+    <span class="tagline">
+      {%- if empty %}{{ project_name }} -- no boards yet
+      {%- else %}{{ source_name }} -- understood, not just redrawn
+      <a href="/p/{{ project_id }}/schematic-image" target="_blank" rel="noopener" class="original-link">view original</a>
+      {%- endif %}
     </span>
     <div class="stats-bar">
+      {% if not empty %}
       <span class="stat">Components <b>{{ totals.components }}</b></span>
       <span class="stat">Nets <b>{{ totals.nets }}</b></span>
       <span class="stat">Sections <b>{{ totals.regions }}</b></span>
       <span class="stat">Enrichment cost <b>${{ "%.3f"|format(totals.spend_usd) }}</b></span>
       <span id="board-switcher" class="board-switcher"></span>
-      <form class="upload-form" method="post" action="/upload" enctype="multipart/form-data">
+      {% endif %}
+      <span id="project-switcher" class="board-switcher"></span>
+      <form class="upload-form" method="post" action="/p/{{ project_id }}/upload" enctype="multipart/form-data">
         <label class="upload-btn" title="Altium schematic PDF, KiCad netlist (.net), or .zip with .net + .kicad_pcb">
           Analyze a board
           <input type="file" name="file" accept=".pdf,.net,.zip" hidden
@@ -31,6 +38,12 @@
   <div class="error-banner">{{ error }}</div>
   {% endif %}
 
+  {% if empty %}
+  <div class="empty-project">
+    <p>This project has no boards yet.</p>
+    <p class="hint">Upload an Altium schematic PDF or KiCad project above to get started.</p>
+  </div>
+  {% else %}
   <div class="layout">
     <div class="canvas-pane">
       <div class="canvas-toolbar">
@@ -88,12 +101,16 @@
       </div>
     </aside>
   </div>
+  {% endif %}
 
+  <script src="/static/project_switcher.js"></script>
+  {% if not empty %}
   <script src="/static/canvas.js"></script>
   <script src="/static/vendor/cytoscape.min.js"></script>
   <script src="/static/vendor/layout-base.js"></script>
   <script src="/static/vendor/cose-base.js"></script>
   <script src="/static/vendor/cytoscape-fcose.js"></script>
   <script src="/static/knowledge_graph.js"></script>
+  {% endif %}
 </body>
 </html>

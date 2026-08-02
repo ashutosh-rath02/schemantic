@@ -50,3 +50,10 @@ target-version = "py311"
 # by checking what it actually flagged before excluding it.
 select = ["E", "F", "B", "I", "UP", "PIE", "ISC", "RUF"]
 extend-select = ["PLW0602"]
+
+[tool.ruff.lint.per-file-ignores]
+# B008 (function-call-in-default-argument) is a false positive for
+# FastAPI's Depends(...) pattern specifically -- calling Depends() in a
+# parameter default is FastAPI's own documented dependency-injection
+# mechanism, not the mutable-default-argument bug B008 exists to catch.
+"schemantic/web/app.py" = ["B008"]

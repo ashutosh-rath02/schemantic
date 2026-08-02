@@ -66,7 +66,7 @@ const KG_STYLE = [
 ];
 
 async function kgLoad() {
-  const res = await fetch("/api/knowledge-graph");
+  const res = await fetch(api("/api/knowledge-graph"));
   kgGraph = await res.json();
   kgRender();
   kgLoaded = true;

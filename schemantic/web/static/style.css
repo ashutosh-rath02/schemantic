@@ -70,6 +70,17 @@ a { color: var(--blue); }
   padding: 8px 20px;
 }
 
+.empty-project {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: calc(100vh - 53px);
+  color: var(--text-dim);
+  text-align: center;
+}
+.empty-project p { margin: 4px 0; font-size: 15px; }
+
 /* ---- layout: canvas + side panel ---- */
 
 .layout {
