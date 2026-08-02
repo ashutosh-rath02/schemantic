@@ -45,6 +45,13 @@ CREATE TABLE IF NOT EXISTS exchanges (
 CREATE INDEX IF NOT EXISTS idx_exchanges_session ON exchanges(session_id);
 """
 
+# Pre-multi-project databases (including the live production one) predate
+# this column -- CREATE TABLE IF NOT EXISTS above is a no-op against an
+# existing table, so it will never add it. ALTER TABLE ADD COLUMN is a fast
+# metadata-only op in SQLite, safe to run as a no-op check on every startup.
+# Every exchange stored before projects existed genuinely belongs to what
+# migration turns into "the default project" -- backfilled to that id below.
+
 
 def _pack(vector: list[float]) -> bytes:
     return struct.pack(f"{len(vector)}f", *vector)
@@ -79,21 +86,40 @@ class ChatMemoryStore:
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as conn:
             conn.executescript(_SCHEMA)
+            self._migrate_project_id(conn)
+
+    def _migrate_project_id(self, conn: sqlite3.Connection) -> None:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(exchanges)")}
+        if "project_id" in columns:
+            return
+        conn.execute("ALTER TABLE exchanges ADD COLUMN project_id TEXT NOT NULL DEFAULT ''")
+        conn.execute(
+            "UPDATE exchanges SET project_id = ? WHERE project_id = ''",
+            ("proj_default",),
+        )
+        conn.commit()
 
     def _connect(self) -> sqlite3.Connection:
         # connection per operation: trivially thread-safe at this scale
         return sqlite3.connect(self.db_path, timeout=10)
 
     def store(
-        self, session_id: str, board: str, question: str, answer: str, tool_trace: list[str]
+        self,
+        project_id: str,
+        session_id: str,
+        board: str,
+        question: str,
+        answer: str,
+        tool_trace: list[str],
     ) -> bool:
         try:
             embedding = self.embed_fn(f"Q: {question}\nA: {answer}")
             with self._connect() as conn:
                 conn.execute(
-                    "INSERT INTO exchanges (session_id, board, question, answer, "
-                    "tool_trace, created_at, embedding) VALUES (?,?,?,?,?,?,?)",
+                    "INSERT INTO exchanges (project_id, session_id, board, question, answer, "
+                    "tool_trace, created_at, embedding) VALUES (?,?,?,?,?,?,?,?)",
                     (
+                        project_id,
                         session_id,
                         board,
                         question,
@@ -109,13 +135,22 @@ class ChatMemoryStore:
             return False
 
     def recall(
-        self, query: str, top_k: int = DEFAULT_TOP_K, min_similarity: float = MIN_SIMILARITY
+        self,
+        project_id: str,
+        query: str,
+        top_k: int = DEFAULT_TOP_K,
+        min_similarity: float = MIN_SIMILARITY,
     ) -> list[dict]:
+        """Cross-session, cross-restart, but never cross-project -- recalled
+        exchanges from an unrelated project's boards would be actively
+        misleading context, not a helpful coincidence."""
         try:
             query_vec = self.embed_fn(query)
             with self._connect() as conn:
                 rows = conn.execute(
-                    "SELECT board, question, answer, created_at, embedding FROM exchanges"
+                    "SELECT board, question, answer, created_at, embedding FROM exchanges "
+                    "WHERE project_id = ?",
+                    (project_id,),
                 ).fetchall()
         except Exception as exc:
             print(f"chat memory recall failed (non-fatal): {exc}")
@@ -136,12 +171,12 @@ class ChatMemoryStore:
         scored.sort(key=lambda r: -r["similarity"])
         return scored[:top_k]
 
-    def history(self, session_id: str, limit: int = 40) -> list[dict]:
+    def history(self, project_id: str, session_id: str, limit: int = 40) -> list[dict]:
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT question, answer, tool_trace, created_at FROM exchanges "
-                "WHERE session_id = ? ORDER BY id DESC LIMIT ?",
-                (session_id, limit),
+                "WHERE session_id = ? AND project_id = ? ORDER BY id DESC LIMIT ?",
+                (session_id, project_id, limit),
             ).fetchall()
         return [
             {"question": q, "answer": a, "tool_trace": t, "created_at": c}
