@@ -34,22 +34,35 @@
   <div class="layout">
     <div class="canvas-pane">
       <div class="canvas-toolbar">
-        <div class="search-wrap">
+        <div class="search-wrap" id="schem-search-wrap">
           <input id="search-input" type="text" placeholder="Search components, parts, nets…" autocomplete="off">
           <div id="search-results" class="search-results"></div>
         </div>
         <div id="region-filter" class="region-chips-wrap"></div>
+        <button class="view-toggle-btn" id="kg-toggle-btn" type="button"
+                title="View the board as a node-link knowledge graph instead of the schematic drawing">
+          Knowledge graph
+        </button>
       </div>
       <svg id="schematic-svg"></svg>
-      <div class="canvas-legend">
+      <div id="kg-cy" class="kg-hidden"></div>
+      <div class="canvas-legend" id="schem-legend">
         <span class="lg lg-ic">IC / module</span>
         <span class="lg lg-conn">connector</span>
         <span class="lg lg-trans">transistor</span>
         <span class="lg lg-diode">diode / LED</span>
         <span class="lg lg-passive">passive</span>
       </div>
-      <div class="canvas-help">scroll to zoom &middot; drag to pan &middot; click parts or wires &middot; Esc to clear &middot; zoom in for pin detail</div>
-      <button class="reset-view" id="reset-view">Reset view</button>
+      <div class="canvas-legend kg-hidden" id="kg-legend">
+        <span class="lg kg-lg-component">component</span>
+        <span class="lg kg-lg-region">region</span>
+        <span class="lg kg-lg-net">net</span>
+        <span class="lg kg-lg-power">power net (hidden)</span>
+      </div>
+      <div class="canvas-help" id="schem-help">scroll to zoom &middot; drag to pan &middot; click parts or wires &middot; Esc to clear &middot; zoom in for pin detail</div>
+      <div class="canvas-help kg-hidden" id="kg-help">scroll to zoom &middot; drag to pan &middot; click a node for detail &middot; Esc to clear</div>
+      <button class="reset-view" id="reset-view" type="button">Reset view</button>
+      <button class="reset-view kg-hidden" id="kg-power-toggle" type="button" style="right:106px;">Show power nets</button>
     </div>
     <aside class="side-column">
       <div class="side-panel" id="side-panel"></div>
@@ -77,5 +90,10 @@
   </div>
 
   <script src="/static/canvas.js"></script>
+  <script src="/static/vendor/cytoscape.min.js"></script>
+  <script src="/static/vendor/layout-base.js"></script>
+  <script src="/static/vendor/cose-base.js"></script>
+  <script src="/static/vendor/cytoscape-fcose.js"></script>
+  <script src="/static/knowledge_graph.js"></script>
 </body>
 </html>
