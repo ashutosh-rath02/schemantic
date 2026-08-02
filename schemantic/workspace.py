@@ -8,8 +8,12 @@ else in this project: an agent proposes matings with pin-level evidence
 validated against the real connectors before it's even stored, and only a
 human click turns a proposal into a confirmed edge the graph will traverse.
 
-Persistence is a single JSON file keyed by board content-hash, so the
-workspace survives restarts and is immune to file renames.
+Persistence is one JSON file per project, keyed by project id, with boards
+inside it keyed by content-hash -- so a workspace survives restarts and is
+immune to file renames. Before multi-project, there was exactly one such
+file (LEGACY_WORKSPACE_PATH); it's kept around only as a migration source
+(see schemantic/projects.py's docstring for why the default project id is
+a fixed constant rather than random -- this is the other half of that).
 """
 
 from __future__ import annotations
@@ -22,9 +26,22 @@ from typing import Any
 
 from schemantic.pipeline import CACHE_DIR, SCHEMA_VERSION, _pdf_hash
 
-WORKSPACE_PATH = CACHE_DIR / "workspace.json"
+LEGACY_WORKSPACE_PATH = CACHE_DIR / "workspace.json"
 
 MATE_STATUSES = ("proposed", "confirmed", "rejected")
+
+
+def workspace_path_for(project_id: str) -> Path:
+    return CACHE_DIR / "projects" / f"{project_id}.json"
+
+
+def load_legacy_workspace() -> dict | None:
+    """The pre-multi-project single global workspace file, if it exists --
+    read only by the one-time migration in schemantic/web/app.py, never by
+    normal request handling."""
+    if LEGACY_WORKSPACE_PATH.exists():
+        return json.loads(LEGACY_WORKSPACE_PATH.read_text(encoding="utf-8"))
+    return None
 
 
 def board_id_for(pdf_path: str) -> str:
@@ -39,15 +56,17 @@ def board_name_for(pdf_path: str) -> str:
     return stem
 
 
-def load_workspace() -> dict:
-    if WORKSPACE_PATH.exists():
-        return json.loads(WORKSPACE_PATH.read_text(encoding="utf-8"))
+def load_workspace(project_id: str) -> dict:
+    path = workspace_path_for(project_id)
+    if path.exists():
+        return json.loads(path.read_text(encoding="utf-8"))
     return {"boards": [], "mates": []}
 
 
-def save_workspace(ws: dict) -> None:
-    WORKSPACE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    WORKSPACE_PATH.write_text(json.dumps(ws, indent=2), encoding="utf-8")
+def save_workspace(ws: dict, project_id: str) -> None:
+    path = workspace_path_for(project_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(ws, indent=2), encoding="utf-8")
 
 
 def add_board(ws: dict, pdf_path: str) -> dict:
