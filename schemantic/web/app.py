@@ -31,6 +31,7 @@ from schemantic.agents.chat import ChatSession, chat_turn  # noqa: E402
 from schemantic.agents.mate_proposer import propose_mates  # noqa: E402
 from schemantic.chat_memory import ChatMemoryStore  # noqa: E402
 from schemantic.design_checks import run_all_checks  # noqa: E402
+from schemantic.graph_api import export_knowledge_graph  # noqa: E402
 from schemantic.hardwaremap import build_hardware_map, render_markdown  # noqa: E402
 from schemantic.kicad import load_kicad_project  # noqa: E402
 from schemantic.pipeline import (  # noqa: E402
@@ -269,6 +270,15 @@ def api_design_checks() -> JSONResponse:
     replacement -- see schemantic/design_checks.py for the exact scope."""
     _ensure_default_board()
     return JSONResponse(run_all_checks(_active_payload()))
+
+
+@app.get("/api/knowledge-graph")
+def api_knowledge_graph() -> JSONResponse:
+    """The board's knowledge graph as typed nodes/edges for the graph-view
+    UI -- same data the chat agent queries, laid out visually. Zero AI:
+    a pure reshaping of the already-verified payload."""
+    _ensure_default_board()
+    return JSONResponse(export_knowledge_graph(_active_payload()))
 
 
 @app.get("/schematic-image")

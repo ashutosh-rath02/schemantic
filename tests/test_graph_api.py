@@ -75,3 +75,39 @@ def test_list_regions_includes_unlabeled(payload):
     regions = graph_api.list_regions(payload)
     names = {r["region"] for r in regions}
     assert "unlabeled area" in names  # P1/P2 headers live there
+
+
+def test_export_knowledge_graph_node_counts_match_board(payload):
+    graph = graph_api.export_knowledge_graph(payload)
+    node_ids = {n["id"] for n in graph["nodes"]}
+    assert len(node_ids) == len(graph["nodes"])  # no duplicate ids
+    component_nodes = [n for n in graph["nodes"] if n["type"] == "component"]
+    net_nodes = [n for n in graph["nodes"] if n["type"] == "net"]
+    assert len(component_nodes) == len(payload["components"])
+    assert len(net_nodes) == len(payload["nets"])
+    assert graph["counts"]["components"] == len(payload["components"])
+    assert graph["counts"]["nets"] == len(payload["nets"])
+
+
+def test_export_knowledge_graph_edges_reference_real_nodes(payload):
+    graph = graph_api.export_knowledge_graph(payload)
+    node_ids = {n["id"] for n in graph["nodes"]}
+    for edge in graph["edges"]:
+        assert edge["source"] in node_ids
+        assert edge["target"] in node_ids
+
+
+def test_export_knowledge_graph_flags_power_nets(payload):
+    graph = graph_api.export_knowledge_graph(payload)
+    gnd_nodes = [n for n in graph["nodes"] if n["type"] == "net" and "GND" in n["label"]]
+    assert gnd_nodes and gnd_nodes[0]["is_power"] is True
+    sda_nodes = [n for n in graph["nodes"] if n["type"] == "net" and "IIC0SDA" in n["label"]]
+    assert sda_nodes and sda_nodes[0]["is_power"] is False
+
+
+def test_export_knowledge_graph_component_carries_ai_identity_as_property(payload):
+    # the AI-derived part number rides on the component node as a property --
+    # never a separate node, since the model only annotates parsed structure
+    graph = graph_api.export_knowledge_graph(payload)
+    u6 = next(n for n in graph["nodes"] if n["type"] == "component" and n["label"] == "U6")
+    assert u6["part_number"] == "INA219BIDR"

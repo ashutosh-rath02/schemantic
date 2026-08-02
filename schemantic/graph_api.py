@@ -286,6 +286,90 @@ def board_summary(payload: Payload) -> dict:
     }
 
 
+def export_knowledge_graph(payload: Payload) -> dict:
+    """The knowledge graph itself, as typed nodes and edges, for the
+    graph-view UI -- the same schema the chat agent reasons over, made
+    visible rather than only queryable.
+
+    Deliberately not pin-level: a "member_of" edge means "this component has
+    at least one pin on this net," not one node per physical pin. At ~150
+    components a pin-level graph would be a few hundred extra nodes for no
+    added legibility -- the same tradeoff graph.py already makes for the
+    schematic canvas. Power nets are flagged (is_power) rather than omitted:
+    the UI hides them by default (a GND net can have 100+ members and would
+    dominate the layout) but they stay available on request, same rationale
+    as the canvas's power-rail handling.
+    """
+    nodes: list[dict] = []
+    edges: list[dict] = []
+    seen_regions: set[str] = set()
+
+    for c in _components(payload):
+        identity = c.get("identity") or {}
+        comp_id = f"component:{c['ref_token']}"
+        nodes.append(
+            {
+                "id": comp_id,
+                "type": "component",
+                "label": _label(c),
+                "region": c["region"] or "unlabeled area",
+                "part_number": identity.get("likely_part_number"),
+                "function": identity.get("function"),
+                "confidence": identity.get("confidence"),
+                "pin_count": c["pin_count"],
+                "has_datasheet": bool(c.get("datasheet")),
+            }
+        )
+
+        region_name = c["region"] or "unlabeled area"
+        if region_name not in seen_regions:
+            seen_regions.add(region_name)
+            info = payload["regions"].get(c["region"], {}) if c["region"] else {}
+            nodes.append(
+                {
+                    "id": f"region:{region_name}",
+                    "type": "region",
+                    "label": region_name,
+                    "explanation": info.get("explanation"),
+                }
+            )
+        edges.append(
+            {"source": comp_id, "target": f"region:{region_name}", "type": "grouped_into"}
+        )
+
+        for n in c["nets"]:
+            edges.append(
+                {
+                    "source": comp_id,
+                    "target": f"net:{n['key']}",
+                    "type": "member_of",
+                    "is_power": n["is_power"],
+                }
+            )
+
+    for key, net in payload["nets"].items():
+        nodes.append(
+            {
+                "id": f"net:{key}",
+                "type": "net",
+                "label": "/".join(net["names"]),
+                "is_power": net["is_power"],
+                "member_count": len(net["members"]),
+            }
+        )
+
+    return {
+        "nodes": nodes,
+        "edges": edges,
+        "counts": {
+            "components": len(payload["components"]),
+            "nets": len(payload["nets"]),
+            "regions": len(seen_regions),
+            "edges": len(edges),
+        },
+    }
+
+
 # ---- workspace-level (multi-board) queries ----
 #
 # Cross-board edges come ONLY from human-confirmed mates: a confirmed mate's
