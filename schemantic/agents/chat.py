@@ -35,6 +35,9 @@ MAX_REMEMBERED_ITEMS = 60    # ~15-20 turns incl. tool traffic; oldest trimmed
 EST_COST_PER_CALL_USD = 0.01
 BUDGET_PER_MESSAGE_USD = 0.15
 
+TITLE_MODEL = os.getenv("SCHEMANTIC_TITLE_MODEL", "gpt-4.1-mini")
+_TITLE_EST_COST_USD = 0.0005
+
 _SYSTEM_PROMPT = """You are Schemantic's board assistant. You answer questions about ONE
 specific circuit board using ONLY facts returned by your tools in this conversation --
 connectivity, part identity, regions all come from a netlist mechanically parsed from the
@@ -76,6 +79,34 @@ class ChatReply(BaseModel):
     fly_to: str | None = Field(
         default=None, description="Single component ref to zoom the canvas to, for where-is questions."
     )
+
+
+class ChatTitle(BaseModel):
+    title: str = Field(
+        description="3-6 word summary of what this chat is about, no trailing punctuation, "
+        "no surrounding quotes -- e.g. 'IMU location and wiring'."
+    )
+
+
+def generate_chat_title(question: str, answer: str, client: OpenAI, supervisor: Supervisor) -> str:
+    """Runs once per session, after its first grounded exchange -- what the
+    chat sidebar shows instead of a raw session id. Cosmetic only: a failure
+    here is caught by the caller and simply leaves the session untitled."""
+    with supervisor.stage("chat_title"):
+        response = client.responses.parse(
+            model=TITLE_MODEL,
+            input=[
+                {
+                    "role": "system",
+                    "content": "Write a short title summarizing what this chat is about, based on "
+                    "its first question and answer. Plain text, no quotes, no trailing period.",
+                },
+                {"role": "user", "content": f"Q: {question}\nA: {answer}"},
+            ],
+            text_format=ChatTitle,
+        )
+        supervisor.spend("chat_title", _TITLE_EST_COST_USD)
+    return response.output_parsed.title
 
 
 # tool name -> (description, {param: (type, description)}, callable)
@@ -350,10 +381,18 @@ def chat_turn(
                     reply = ChatReply(answer="I couldn't produce an answer for that -- try rephrasing.")
                 session.remember({"role": "assistant", "content": reply.answer})
                 if memory is not None and reply.answer and tools_ever_called:
+                    title = None
+                    if memory.needs_title(project_id, session.session_id):
+                        try:
+                            title = generate_chat_title(user_message, reply.answer, client, supervisor)
+                        except Exception as exc:  # title is cosmetic, never break the turn over it
+                            print(f"chat title generation failed (non-fatal): {exc}")
                     memory.store(
                         project_id, session.session_id, board_name, user_message,
                         reply.answer, tool_trace,
                     )
+                    if title:
+                        memory.set_session_title(project_id, session.session_id, title)
                 return reply, tool_trace
             tools_ever_called = True
 
