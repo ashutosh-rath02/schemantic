@@ -81,6 +81,7 @@
       <div class="side-panel" id="side-panel"></div>
       <div class="chat-drawer" id="chat-drawer">
         <div class="chat-header" id="chat-toggle">
+          <button class="chat-history-btn" id="chat-history-btn" type="button" title="Past chats">☰</button>
           <span>Ask the board</span>
           <span class="chat-hint">answers come from the parsed netlist, not model memory</span>
           <span class="chat-caret" id="chat-caret">▾</span>
@@ -101,6 +102,16 @@
       </div>
     </aside>
   </div>
+
+  <div class="chat-sidebar-overlay" id="chat-sidebar-overlay"></div>
+  <aside class="chat-sidebar" id="chat-sidebar">
+    <div class="chat-sidebar-header">
+      <span>Chats</span>
+      <button class="chat-sidebar-close" id="chat-sidebar-close" type="button" title="Close">&times;</button>
+    </div>
+    <button class="chat-sidebar-new" id="chat-sidebar-new" type="button">+ New chat</button>
+    <div class="chat-sidebar-list" id="chat-sidebar-list"></div>
+  </aside>
   {% endif %}
 
   <script src="/static/project_switcher.js"></script>

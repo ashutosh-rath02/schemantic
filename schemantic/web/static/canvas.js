@@ -103,6 +103,7 @@ document.getElementById("reset-view").addEventListener("click", () => {
 
 window.addEventListener("keydown", (e) => {
   if (e.target.tagName === "INPUT") { if (e.key === "Escape") e.target.blur(); return; }
+  if (e.key === "Escape" && chatSidebar.classList.contains("open")) { closeChatSidebar(); return; }
   if (e.key === "Escape") { clearSelection(true); }
   if (e.key === "+" || e.key === "=") zoomCenter(1 / 1.3);
   if (e.key === "-") zoomCenter(1.3);
@@ -832,6 +833,7 @@ const chatMessages = document.getElementById("chat-messages");
 const chatForm = document.getElementById("chat-form");
 const chatInput = document.getElementById("chat-input");
 const chatSend = document.getElementById("chat-send");
+const CHAT_WELCOME_HTML = chatMessages.innerHTML;  // captured before anything else touches it
 
 const chatDrawer = document.getElementById("chat-drawer");
 if (stGet(chatKey("collapsed"), false)) chatDrawer.classList.add("collapsed");
@@ -864,27 +866,110 @@ function renderChatEntry(entry) {
   div.innerHTML = entry.html;
   chatMessages.appendChild(div);
 }
+async function fetchSessionEntries(sessionId) {
+  const res = await fetch(api(`/api/chat/history?session_id=${encodeURIComponent(sessionId)}`));
+  const data = await res.json();
+  const entries = [];
+  for (const ex of data.exchanges || []) {
+    entries.push({ cls: "chat-msg-user", html: esc(ex.question) });
+    let botHtml = esc(ex.answer);
+    if (ex.tool_trace) botHtml += `<div class="chat-provenance">checked: ${esc(ex.tool_trace)}</div>`;
+    entries.push({ cls: "chat-msg-bot", html: botHtml });
+  }
+  return entries;
+}
+
 async function restoreTranscript() {
   if (chatLog.length) {
     chatLog.forEach(renderChatEntry);
   } else if (chatSessionId) {
     try {
-      const res = await fetch(api(`/api/chat/history?session_id=${encodeURIComponent(chatSessionId)}`));
-      const data = await res.json();
-      for (const ex of data.exchanges || []) {
-        const q = { cls: "chat-msg-user", html: esc(ex.question) };
-        let botHtml = esc(ex.answer);
-        if (ex.tool_trace) botHtml += `<div class="chat-provenance">checked: ${esc(ex.tool_trace)}</div>`;
-        const a = { cls: "chat-msg-bot", html: botHtml };
-        chatLog.push(q, a);
-        renderChatEntry(q); renderChatEntry(a);
-      }
+      chatLog = await fetchSessionEntries(chatSessionId);
+      chatLog.forEach(renderChatEntry);
       if (chatLog.length) stSet(chatKey("log"), chatLog);
     } catch { /* history unavailable -- start fresh */ }
   }
   if (chatLog.length) chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 restoreTranscript();
+
+// ---- chat sidebar: past chats for this project ----
+const chatHistoryBtn = document.getElementById("chat-history-btn");
+const chatSidebarOverlay = document.getElementById("chat-sidebar-overlay");
+const chatSidebar = document.getElementById("chat-sidebar");
+const chatSidebarClose = document.getElementById("chat-sidebar-close");
+const chatSidebarNew = document.getElementById("chat-sidebar-new");
+const chatSidebarList = document.getElementById("chat-sidebar-list");
+
+function timeAgo(unixSeconds) {
+  const diff = Date.now() / 1000 - unixSeconds;
+  if (diff < 60) return "just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+async function openChatSidebar() {
+  chatSidebarOverlay.classList.add("open");
+  chatSidebar.classList.add("open");
+  chatSidebarList.innerHTML = '<div class="chat-sidebar-empty">Loading…</div>';
+  try {
+    const data = await (await fetch(api("/api/chat/sessions"))).json();
+    const sessions = data.sessions || [];
+    if (!sessions.length) {
+      chatSidebarList.innerHTML = '<div class="chat-sidebar-empty">No past chats yet.</div>';
+      return;
+    }
+    chatSidebarList.innerHTML = sessions.map((s) => `
+      <button class="chat-sidebar-item${s.session_id === chatSessionId ? " active" : ""}" type="button" data-session="${esc(s.session_id)}">
+        <span class="title">${esc(s.title || "Untitled chat")}</span>
+        <span class="when">${timeAgo(s.updated_at)}</span>
+      </button>`).join("");
+    chatSidebarList.querySelectorAll("[data-session]").forEach((btn) => {
+      btn.addEventListener("click", () => switchToChatSession(btn.dataset.session));
+    });
+  } catch {
+    chatSidebarList.innerHTML = '<div class="chat-sidebar-empty">Couldn’t load past chats.</div>';
+  }
+}
+
+function closeChatSidebar() {
+  chatSidebarOverlay.classList.remove("open");
+  chatSidebar.classList.remove("open");
+}
+
+async function switchToChatSession(sessionId) {
+  closeChatSidebar();
+  if (sessionId === chatSessionId) return;
+  chatSessionId = sessionId;
+  stSet(chatKey("sessionId"), chatSessionId);
+  try {
+    chatLog = await fetchSessionEntries(sessionId);
+  } catch {
+    chatLog = [];
+  }
+  chatMessages.innerHTML = "";
+  chatLog.forEach(renderChatEntry);
+  stSet(chatKey("log"), chatLog);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function startNewChat() {
+  closeChatSidebar();
+  chatSessionId = null;
+  chatLog = [];
+  stSet(chatKey("sessionId"), null);
+  stSet(chatKey("log"), []);
+  chatMessages.innerHTML = CHAT_WELCOME_HTML;
+}
+
+chatHistoryBtn.addEventListener("click", (e) => {
+  e.stopPropagation();  // don't also trigger the chat-header's collapse toggle
+  openChatSidebar();
+});
+chatSidebarClose.addEventListener("click", closeChatSidebar);
+chatSidebarOverlay.addEventListener("click", closeChatSidebar);
+chatSidebarNew.addEventListener("click", startNewChat);
 
 function resolveRef(ref) {
   const rl = String(ref).trim().toLowerCase();

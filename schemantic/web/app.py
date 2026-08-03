@@ -577,6 +577,17 @@ def api_chat_history(
     return JSONResponse({"exchanges": _memory().history(project_id, session_id)})
 
 
+@app.get("/p/{project_id}/api/chat/sessions")
+def api_chat_sessions(
+    project_id: str, _state: ProjectState = Depends(_resolve_project)
+) -> JSONResponse:
+    """Past chats for this project, most recently active first -- what the
+    chat sidebar renders. Titles are AI-generated after each session's
+    first grounded exchange; a session that hasn't gotten one yet (title
+    generation failed, or the first turn is still in flight) shows empty."""
+    return JSONResponse({"sessions": _memory().list_sessions(project_id)})
+
+
 @app.post("/p/{project_id}/api/chat")
 def api_chat(
     project_id: str, req: ChatRequest, state: ProjectState = Depends(_resolve_project)
