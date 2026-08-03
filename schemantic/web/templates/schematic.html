@@ -7,7 +7,10 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <script>const PROJECT_ID = {{ project_id | tojson }};</script>
+  <script>
+    const PROJECT_ID = {{ project_id | tojson }};
+    const IS_ADMIN = {{ is_admin | tojson }};
+  </script>
   <header class="site-header">
     <span class="logo">Schemantic</span>
     <span class="tagline">
@@ -25,6 +28,7 @@
       <span id="board-switcher" class="board-switcher"></span>
       {% endif %}
       <span id="project-switcher" class="board-switcher"></span>
+      {% if is_admin %}
       <form class="upload-form" method="post" action="/p/{{ project_id }}/upload" enctype="multipart/form-data">
         <label class="upload-btn" title="Altium schematic PDF, KiCad netlist (.net), or .zip with .net + .kicad_pcb">
           Analyze a board
@@ -32,6 +36,11 @@
                  onchange="this.parentElement.firstChild.textContent='Analyzing… (~1-2 min)'; this.form.submit();">
         </label>
       </form>
+      <a class="auth-link" href="/auth/logout">Log out</a>
+      {% else %}
+      <span class="hint">Log in to add boards</span>
+      <a class="auth-link" href="/auth/login">Log in with GitHub</a>
+      {% endif %}
     </div>
   </header>
   {% if error %}

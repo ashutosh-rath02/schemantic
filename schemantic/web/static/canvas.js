@@ -494,9 +494,10 @@ function renderOverview() {
       <div class="link-row" style="margin-top:8px;">
         <a class="link-btn" href="${api("/api/hardwaremap")}" download>Export hardware map (.md)</a>
         <a class="link-btn" href="${api("/api/hardwaremap?format=json")}" target="_blank" rel="noopener">.json</a>
-        <a class="link-btn" href="${api("/api/firmware-starter")}" download
-           title="Pin header + demo sketch generated from the map -- ~30s, a starting point, not production">Starter firmware (.zip)</a>
+        ${IS_ADMIN ? `<a class="link-btn" href="${api("/api/firmware-starter")}" download
+           title="Pin header + demo sketch generated from the map -- ~30s, a starting point, not production">Starter firmware (.zip)</a>` : ""}
       </div>
+      ${!IS_ADMIN ? '<span class="hint">Log in to generate starter firmware.</span>' : ""}
       <span class="hint">Pin tables, buses, rails, datasheet links -- drop it into a firmware repo
       so a coding agent knows what's actually wired where.</span>
     </div>
@@ -764,7 +765,7 @@ function boardLinksHtml() {
       : m.status === "rejected"
         ? '<span class="badge">rejected</span>'
         : '<span class="badge badge-inferred">AI-proposed -- needs your call</span>';
-    const buttons = m.status === "proposed"
+    const buttons = m.status === "proposed" && IS_ADMIN
       ? `<div class="label-buttons" style="margin-top:8px;">
            <button class="btn btn-good" data-mate="${esc(m.id)}" data-decision="confirmed">Confirm link</button>
            <button class="btn btn-bad" data-mate="${esc(m.id)}" data-decision="rejected">Reject</button>
@@ -786,7 +787,7 @@ function boardLinksHtml() {
       physical harness decisions. The AI proposes candidates with pin-level evidence (each one
       mechanically validated against the real connectors); only links YOU confirm become
       traversable in cross-board answers.</p>
-      <button class="btn" id="propose-mates-btn">Propose board links (AI)</button>
+      ${IS_ADMIN ? '<button class="btn" id="propose-mates-btn">Propose board links (AI)</button>' : ""}
     </div>
     ${cards}`;
 }

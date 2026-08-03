@@ -23,22 +23,29 @@
     const chips = data.projects
       .map((p) => `<span class="board-chip${p.id === PROJECT_ID ? " active" : ""}" data-project="${esc(p.id)}">${esc(p.name)}</span>`)
       .join("");
-    el.innerHTML = chips + `<span class="board-chip" id="new-project-chip" title="Create a new project">+ New</span>`;
+    // creating a project is login-gated server-side too (POST /api/projects
+    // 401s for anonymous callers) -- hiding the chip here is just the UI
+    // reflection of that, not the actual enforcement
+    el.innerHTML = chips + (IS_ADMIN
+      ? `<span class="board-chip" id="new-project-chip" title="Create a new project">+ New</span>`
+      : "");
     el.querySelectorAll("[data-project]").forEach((chip) => {
       chip.onclick = () => {
         if (chip.dataset.project !== PROJECT_ID) location.href = "/p/" + chip.dataset.project + "/";
       };
     });
     const newBtn = document.getElementById("new-project-chip");
-    newBtn.onclick = async () => {
-      const res = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const project = await res.json();
-      location.href = "/p/" + project.id + "/";
-    };
+    if (newBtn) {
+      newBtn.onclick = async () => {
+        const res = await fetch("/api/projects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        const project = await res.json();
+        location.href = "/p/" + project.id + "/";
+      };
+    }
   }
 
   render();
