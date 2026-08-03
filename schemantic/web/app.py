@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -27,9 +28,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from openai import OpenAI
 from pydantic import BaseModel
+from starlette.middleware.sessions import SessionMiddleware
 
 load_dotenv()
 
+from schemantic import auth  # noqa: E402
 from schemantic import projects as proj_store  # noqa: E402
 from schemantic import workspace as ws_store  # noqa: E402
 from schemantic.agents.chat import ChatSession, chat_turn  # noqa: E402
@@ -69,6 +72,17 @@ class NoCacheStaticFiles(StaticFiles):
 app = FastAPI(title="Schemantic")
 app.mount("/static", NoCacheStaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
+
+# https_only defaults on -- the live site is HTTPS-only. Overridable so the
+# gate (_require_admin behavior) stays testable against plain-http local
+# dev; the actual GitHub OAuth round-trip only makes sense against the live
+# site anyway, since the registered callback URL is fixed to it.
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.getenv("SCHEMANTIC_SESSION_SECRET", ""),
+    https_only=os.getenv("SCHEMANTIC_SESSION_HTTPS_ONLY", "1") == "1",
+    same_site="lax",
+)
 
 
 @dataclass
@@ -191,6 +205,44 @@ def _board_names(state: ProjectState) -> dict[str, str]:
     return {b["id"]: b["name"] for b in state.workspace["boards"] if b["id"] in state.boards}
 
 
+# ---- auth: admin-only GitHub login gate, not a user-accounts system ----
+# Deliberately named around "admin", not "session" -- session_id already
+# means something unrelated (chat-conversation identity) throughout this
+# file; reusing that word for login state would read as the same concept.
+
+
+def _require_admin(request: Request) -> None:
+    if not request.session.get("admin"):
+        raise HTTPException(status_code=401, detail="log in required")
+
+
+@app.get("/auth/login")
+def auth_login(request: Request):
+    state = secrets.token_urlsafe(16)
+    request.session["oauth_state"] = state
+    redirect_uri = str(request.url_for("auth_callback"))
+    return RedirectResponse(auth.authorize_url(redirect_uri, state))
+
+
+@app.get("/auth/github/callback")
+def auth_callback(request: Request, code: str, state: str):
+    if state != request.session.pop("oauth_state", None):
+        return RedirectResponse("/?error=Login+failed+-+try+again")
+    redirect_uri = str(request.url_for("auth_callback"))
+    login = auth.exchange_code_for_login(code, redirect_uri)
+    if auth.is_admin_login(login):
+        request.session["admin"] = True
+        return RedirectResponse("/")
+    request.session.pop("admin", None)
+    return RedirectResponse("/?error=That+GitHub+account+isn%27t+authorized+for+this+site")
+
+
+@app.get("/auth/logout")
+def auth_logout(request: Request):
+    request.session.clear()
+    return RedirectResponse("/")
+
+
 @app.get("/healthz")
 def healthz():
     return {"status": "ok"}
@@ -221,11 +273,18 @@ def index(
     proj_store.save_registry(_registry)
     board_id = _ensure_board(state, project_id)
     project = proj_store.get_project(_registry, project_id)
+    is_admin = bool(request.session.get("admin"))
     if board_id is None:
         return templates.TemplateResponse(
             request,
             "schematic.html",
-            {"empty": True, "project_id": project_id, "project_name": project["name"], "error": error},
+            {
+                "empty": True,
+                "project_id": project_id,
+                "project_name": project["name"],
+                "error": error,
+                "is_admin": is_admin,
+            },
         )
     result = state.boards[board_id]["payload"]
     totals = {
@@ -244,13 +303,17 @@ def index(
             "error": error,
             "project_id": project_id,
             "project_name": project["name"],
+            "is_admin": is_admin,
         },
     )
 
 
 @app.post("/p/{project_id}/upload")
 async def upload(
-    project_id: str, file: UploadFile, state: ProjectState = Depends(_resolve_project)
+    project_id: str,
+    file: UploadFile,
+    _admin: None = Depends(_require_admin),
+    state: ProjectState = Depends(_resolve_project),
 ):
     filename = file.filename or ""
     suffix = Path(filename).suffix.lower()
@@ -313,10 +376,15 @@ def api_hardwaremap(
 
 
 @app.get("/p/{project_id}/api/firmware-starter")
-def api_firmware_starter(project_id: str, state: ProjectState = Depends(_resolve_project)):
+def api_firmware_starter(
+    project_id: str,
+    _admin: None = Depends(_require_admin),
+    state: ProjectState = Depends(_resolve_project),
+):
     """Starter firmware zip generated from the hardware map -- grounded in
     verified connectivity, TODO-marked where the map can't know, and
-    labeled a starting point in every file."""
+    labeled a starting point in every file. Login-gated: a real paid AI
+    generation call, same reasoning as propose-mates."""
     import io
     import zipfile
 
@@ -338,7 +406,7 @@ def api_firmware_starter(project_id: str, state: ProjectState = Depends(_resolve
             status_code=400,
         )
     try:
-        starter = generate_starter(hw_map, _client(), _agent_supervisor)
+        starter = generate_starter(hw_map, _client(), _get_supervisor("admin"))
     except BudgetExceeded:
         return JSONResponse({"error": "agent budget exhausted"}, status_code=429)
 
@@ -420,7 +488,9 @@ def api_list_projects() -> JSONResponse:
 
 
 @app.post("/api/projects")
-def api_create_project(req: CreateProjectRequest) -> JSONResponse:
+def api_create_project(
+    req: CreateProjectRequest, _admin: None = Depends(_require_admin)
+) -> JSONResponse:
     project = proj_store.create_project(_registry, req.name)
     proj_store.set_last_active(_registry, project["id"])
     proj_store.save_registry(_registry)
@@ -430,7 +500,7 @@ def api_create_project(req: CreateProjectRequest) -> JSONResponse:
 # ---- workspace / multi-board ----
 
 _agent_client: OpenAI | None = None
-_agent_supervisor = Supervisor(max_spend_usd=5.0)
+_supervisors: dict[str, Supervisor] = {}
 
 
 def _client() -> OpenAI:
@@ -438,6 +508,18 @@ def _client() -> OpenAI:
     if _agent_client is None:
         _agent_client = OpenAI()
     return _agent_client
+
+
+def _get_supervisor(scope: str) -> Supervisor:
+    """Two independent budget pools, not one shared cap: "public" covers
+    chat (the one thing anonymous visitors can trigger repeatedly and for
+    free), "admin" covers everything login-gated. Public chat traffic can
+    no longer exhaust the budget the admin needs for uploads/proposals/
+    firmware generation, and vice versa."""
+    if scope not in _supervisors:
+        cap = float(os.getenv(f"SCHEMANTIC_{scope.upper()}_BUDGET_USD", "5.0"))
+        _supervisors[scope] = Supervisor(max_spend_usd=cap)
+    return _supervisors[scope]
 
 
 @app.get("/p/{project_id}/api/workspace")
@@ -476,7 +558,9 @@ def api_switch(
 
 @app.post("/p/{project_id}/api/workspace/propose-mates")
 def api_propose_mates(
-    project_id: str, state: ProjectState = Depends(_resolve_project)
+    project_id: str,
+    _admin: None = Depends(_require_admin),
+    state: ProjectState = Depends(_resolve_project),
 ) -> JSONResponse:
     """Runs the proposer across the two most relevant boards (v1: exactly
     two boards in the project). Proposals are mechanically validated before
@@ -492,7 +576,7 @@ def api_propose_mates(
         result = propose_mates(
             state.boards[bid_a]["payload"], names[bid_a],
             state.boards[bid_b]["payload"], names[bid_b],
-            _client(), _agent_supervisor,
+            _client(), _get_supervisor("admin"),
         )
     except BudgetExceeded:
         return JSONResponse({"error": "agent budget exhausted"}, status_code=429)
@@ -532,6 +616,7 @@ def api_mate_decision(
     project_id: str,
     mate_id: str,
     req: MateDecision,
+    _admin: None = Depends(_require_admin),
     state: ProjectState = Depends(_resolve_project),
 ) -> JSONResponse:
     if req.status not in ("confirmed", "rejected"):
@@ -556,7 +641,7 @@ def _memory() -> ChatMemoryStore:
 
         def embed(text: str) -> list[float]:
             response = _client().embeddings.create(model=EMBED_MODEL, input=text[:8000])
-            _agent_supervisor.spend("chat_memory", 0.0001)
+            _get_supervisor("public").spend("chat_memory", 0.0001)
             return response.data[0].embedding
 
         _chat_memory = ChatMemoryStore(CACHE_DIR / "chat_memory.db", embed)
@@ -606,7 +691,7 @@ def api_chat(
             req.message[:2000],
             payload,
             _client(),
-            _agent_supervisor,
+            _get_supervisor("public"),
             project_id=project_id,
             workspace_payloads=payloads,
             board_names=_board_names(state),
