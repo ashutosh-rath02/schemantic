@@ -758,22 +758,22 @@ a { color: var(--teal); }
 
 /* ---- chat sidebar (past chats, slide-out) ---- */
 
-.chat-history-btn {
+.sidebar-toggle-btn {
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
   background: var(--bg-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text-dim);
-  font-size: 11.5px;
-  font-weight: 600;
+  font-size: 15px;
   line-height: 1;
-  padding: 5px 9px;
   cursor: pointer;
 }
-.chat-history-btn:hover { color: var(--teal); border-color: var(--teal); }
-.chat-history-btn .icon { font-size: 13px; }
+.sidebar-toggle-btn:hover { color: var(--teal); border-color: var(--teal); }
 
 .chat-sidebar-overlay {
   position: fixed;

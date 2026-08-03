@@ -13,6 +13,9 @@
   </script>
   <header class="site-header">
     <div class="header-row header-row-brand">
+      {% if not empty %}
+      <button class="sidebar-toggle-btn" id="chat-history-btn" type="button" title="Chat history">☰</button>
+      {% endif %}
       <span class="logo">Schemantic</span>
       <span class="tagline">
         {%- if empty %}{{ project_name }} -- no boards yet
@@ -95,9 +98,6 @@
       <div class="side-panel" id="side-panel"></div>
       <div class="chat-drawer" id="chat-drawer">
         <div class="chat-header" id="chat-toggle">
-          <button class="chat-history-btn" id="chat-history-btn" type="button" title="Past chats">
-            <span class="icon">☰</span>History
-          </button>
           <span class="chat-header-label">
             Ask the board
             <span class="chat-hint">answers come from the parsed netlist, not model memory</span>
