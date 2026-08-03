@@ -31,8 +31,8 @@ function chatKey(suffix) { return `project.${PROJECT_ID}.chat.${suffix}`; }
 
 // distinct hues for a selected component's nets, so you can tell which
 // wire is which; assigned per selection, mirrored as dots in the panel
-const NET_COLORS = ["#3fb950", "#58a6ff", "#d29922", "#f85149", "#39c5cf",
-                    "#bc8cff", "#ff7b72", "#7ee787", "#ffa657", "#79c0ff"];
+const NET_COLORS = ["#5fb3ae", "#d4874a", "#d9b65c", "#8fa8d6", "#c47fa6",
+                    "#7fc48a", "#d6857a", "#a394c9", "#c2b8a3", "#6fb8c9"];
 
 let schematic = null;
 let comps = {};
@@ -586,7 +586,7 @@ function renderComponentPanel(c) {
 
   const signalHtml = signal.map((n) => {
     const peers = schematic.nets[n.key].members.filter((m) => m !== c.ref_token);
-    const color = netColorMap[n.key] || "#3fb950";
+    const color = netColorMap[n.key] || "#5fb3ae";
     return `
       <div class="net-row" data-hovernet="${esc(n.key)}">
         <div class="net-name mono" data-net="${esc(n.key)}">

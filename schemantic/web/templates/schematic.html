@@ -12,22 +12,32 @@
     const IS_ADMIN = {{ is_admin | tojson }};
   </script>
   <header class="site-header">
-    <span class="logo">Schemantic</span>
-    <span class="tagline">
-      {%- if empty %}{{ project_name }} -- no boards yet
-      {%- else %}{{ source_name }} -- understood, not just redrawn
-      <a href="/p/{{ project_id }}/schematic-image" target="_blank" rel="noopener" class="original-link">view original</a>
-      {%- endif %}
-    </span>
-    <div class="stats-bar">
-      {% if not empty %}
-      <span class="stat">Components <b>{{ totals.components }}</b></span>
-      <span class="stat">Nets <b>{{ totals.nets }}</b></span>
-      <span class="stat">Sections <b>{{ totals.regions }}</b></span>
-      <span class="stat">Enrichment cost <b>${{ "%.3f"|format(totals.spend_usd) }}</b></span>
-      <span id="board-switcher" class="board-switcher"></span>
-      {% endif %}
+    <div class="header-row header-row-brand">
+      <span class="logo">Schemantic</span>
+      <span class="tagline">
+        {%- if empty %}{{ project_name }} -- no boards yet
+        {%- else %}{{ source_name }} -- understood, not just redrawn
+        <a href="/p/{{ project_id }}/schematic-image" target="_blank" rel="noopener" class="original-link">view original</a>
+        {%- endif %}
+      </span>
+      <span class="header-spacer"></span>
       <span id="project-switcher" class="board-switcher"></span>
+      {% if is_admin %}
+      <a class="auth-link" href="/auth/logout">Log out</a>
+      {% else %}
+      <a class="auth-link" href="/auth/login">Log in with GitHub</a>
+      {% endif %}
+    </div>
+    {% if not empty %}
+    <div class="header-row header-row-board">
+      <span class="stats-bar">
+        <span class="stat">Components<b>{{ totals.components }}</b></span>
+        <span class="stat">Nets<b>{{ totals.nets }}</b></span>
+        <span class="stat">Sections<b>{{ totals.regions }}</b></span>
+        <span class="stat">Enrichment cost<b>${{ "%.3f"|format(totals.spend_usd) }}</b></span>
+      </span>
+      <span id="board-switcher" class="board-switcher"></span>
+      <span class="header-spacer"></span>
       {% if is_admin %}
       <form class="upload-form" method="post" action="/p/{{ project_id }}/upload" enctype="multipart/form-data">
         <label class="upload-btn" title="Altium schematic PDF, KiCad netlist (.net), or .zip with .net + .kicad_pcb">
@@ -36,12 +46,11 @@
                  onchange="this.parentElement.firstChild.textContent='Analyzing… (~1-2 min)'; this.form.submit();">
         </label>
       </form>
-      <a class="auth-link" href="/auth/logout">Log out</a>
       {% else %}
       <span class="hint">Log in to add boards</span>
-      <a class="auth-link" href="/auth/login">Log in with GitHub</a>
       {% endif %}
     </div>
+    {% endif %}
   </header>
   {% if error %}
   <div class="error-banner">{{ error }}</div>
@@ -90,9 +99,13 @@
       <div class="side-panel" id="side-panel"></div>
       <div class="chat-drawer" id="chat-drawer">
         <div class="chat-header" id="chat-toggle">
-          <button class="chat-history-btn" id="chat-history-btn" type="button" title="Past chats">☰</button>
-          <span>Ask the board</span>
-          <span class="chat-hint">answers come from the parsed netlist, not model memory</span>
+          <button class="chat-history-btn" id="chat-history-btn" type="button" title="Past chats">
+            <span class="icon">☰</span>History
+          </button>
+          <span class="chat-header-label">
+            Ask the board
+            <span class="chat-hint">answers come from the parsed netlist, not model memory</span>
+          </span>
           <span class="chat-caret" id="chat-caret">▾</span>
         </div>
         <div class="chat-body" id="chat-body">
