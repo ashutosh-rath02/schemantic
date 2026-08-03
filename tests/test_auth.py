@@ -36,3 +36,14 @@ def test_unconfigured_admin_login_matches_nothing(monkeypatch):
     assert auth.is_admin_login("") is False
     assert auth.is_admin_login("anyone") is False
     assert auth.is_admin_login(None) is False
+
+
+def test_authorize_url_properly_encodes_the_redirect_uri(monkeypatch):
+    # a raw (unencoded) redirect_uri happened to work against GitHub's
+    # actual parser but is fragile -- this pins the correct, robust form
+    monkeypatch.setattr(auth, "GITHUB_CLIENT_ID", "abc123")
+    url = auth.authorize_url("https://example.com/auth/github/callback", "xyz")
+    assert "client_id=abc123" in url
+    assert "redirect_uri=https%3A%2F%2Fexample.com%2Fauth%2Fgithub%2Fcallback" in url
+    assert "scope=read%3Auser" in url
+    assert "state=xyz" in url

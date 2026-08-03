@@ -16,6 +16,7 @@ auth check runs before project resolution, not after).
 
 from fastapi.testclient import TestClient
 
+import schemantic.web.app as app_module
 from schemantic.web.app import _require_admin, app
 
 client = TestClient(app)
@@ -77,6 +78,27 @@ def test_switch_and_chat_stay_public_no_login_required():
     assert switch_res.status_code != 401
     chat_res = client.post(f"/p/{FAKE_PROJECT}/api/chat", json={"message": "hi"})
     assert chat_res.status_code != 401
+
+
+def test_login_redirect_uses_configured_public_base_url_not_request_scheme(monkeypatch):
+    # the actual bug this pins: without a configured public base URL, the
+    # callback is built from the incoming request's scheme -- which behind
+    # nginx's TLS termination is plain http, and GitHub rejects a callback
+    # URL that doesn't exactly match the https:// one the OAuth App is
+    # registered with. Verified against the real deployment, not assumed.
+    monkeypatch.setattr(app_module, "PUBLIC_BASE_URL", "https://schemantic.example.com")
+    res = client.get("/auth/login", follow_redirects=False)
+    assert res.status_code == 307
+    location = res.headers["location"]
+    assert "redirect_uri=https%3A%2F%2Fschemantic.example.com%2Fauth%2Fgithub%2Fcallback" in location
+    assert "http%3A%2F%2Ftestserver" not in location
+
+
+def test_login_redirect_falls_back_to_request_derived_url_when_unconfigured(monkeypatch):
+    monkeypatch.setattr(app_module, "PUBLIC_BASE_URL", "")
+    res = client.get("/auth/login", follow_redirects=False)
+    location = res.headers["location"]
+    assert "redirect_uri=http%3A%2F%2Ftestserver%2Fauth%2Fgithub%2Fcallback" in location
 
 
 def test_authenticated_request_passes_the_gate():

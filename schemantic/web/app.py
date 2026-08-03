@@ -216,11 +216,29 @@ def _require_admin(request: Request) -> None:
         raise HTTPException(status_code=401, detail="log in required")
 
 
+# Set in production (nginx terminates TLS on the host, then proxies plain
+# HTTP to this container) -- without it, request.url_for() builds the OAuth
+# callback as http://..., which GitHub rejects as a mismatch against the
+# https:// callback URL the OAuth App is registered with. Deliberately not
+# solved by trusting X-Forwarded-Proto instead: port 8000 is directly
+# internet-reachable (not just via nginx), so trusting a forwarded header
+# there means trusting whatever the client sends. An explicit, fixed public
+# origin has no such ambiguity. Falls back to request-derived construction
+# when unset, so local http://127.0.0.1 testing of the gate needs no config.
+PUBLIC_BASE_URL = os.getenv("SCHEMANTIC_PUBLIC_BASE_URL", "").rstrip("/")
+
+
+def _callback_redirect_uri(request: Request) -> str:
+    if PUBLIC_BASE_URL:
+        return f"{PUBLIC_BASE_URL}/auth/github/callback"
+    return str(request.url_for("auth_callback"))
+
+
 @app.get("/auth/login")
 def auth_login(request: Request):
     state = secrets.token_urlsafe(16)
     request.session["oauth_state"] = state
-    redirect_uri = str(request.url_for("auth_callback"))
+    redirect_uri = _callback_redirect_uri(request)
     return RedirectResponse(auth.authorize_url(redirect_uri, state))
 
 
@@ -228,7 +246,7 @@ def auth_login(request: Request):
 def auth_callback(request: Request, code: str, state: str):
     if state != request.session.pop("oauth_state", None):
         return RedirectResponse("/?error=Login+failed+-+try+again")
-    redirect_uri = str(request.url_for("auth_callback"))
+    redirect_uri = _callback_redirect_uri(request)
     login = auth.exchange_code_for_login(code, redirect_uri)
     if auth.is_admin_login(login):
         request.session["admin"] = True

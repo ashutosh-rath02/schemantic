@@ -9,6 +9,7 @@ services:
       SCHEMANTIC_GITHUB_CLIENT_SECRET: ${SCHEMANTIC_GITHUB_CLIENT_SECRET}
       SCHEMANTIC_ADMIN_GITHUB_LOGIN: ${SCHEMANTIC_ADMIN_GITHUB_LOGIN}
       SCHEMANTIC_SESSION_SECRET: ${SCHEMANTIC_SESSION_SECRET}
+      SCHEMANTIC_PUBLIC_BASE_URL: ${SCHEMANTIC_PUBLIC_BASE_URL}
     volumes:
       # enrichment cache, fetched datasheets, workspace.json, and the
       # chat-memory SQLite DB all live here -- a bind mount (not a named

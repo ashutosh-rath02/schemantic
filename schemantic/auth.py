@@ -17,6 +17,7 @@ deterministic logic, don't mock the network.
 from __future__ import annotations
 
 import os
+from urllib.parse import urlencode
 
 import httpx
 
@@ -31,10 +32,15 @@ _TIMEOUT_S = 10.0
 
 
 def authorize_url(redirect_uri: str, state: str) -> str:
-    return (
-        f"{_AUTHORIZE_URL}?client_id={GITHUB_CLIENT_ID}"
-        f"&redirect_uri={redirect_uri}&scope=read:user&state={state}"
+    params = urlencode(
+        {
+            "client_id": GITHUB_CLIENT_ID,
+            "redirect_uri": redirect_uri,
+            "scope": "read:user",
+            "state": state,
+        }
     )
+    return f"{_AUTHORIZE_URL}?{params}"
 
 
 def exchange_code_for_login(code: str, redirect_uri: str) -> str | None:
