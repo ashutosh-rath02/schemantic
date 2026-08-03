@@ -23,8 +23,16 @@
       <span class="header-spacer"></span>
       <span id="project-switcher" class="board-switcher"></span>
       {% if is_admin %}
+      <form class="upload-form" method="post" action="/p/{{ project_id }}/upload" enctype="multipart/form-data">
+        <label class="upload-btn" title="Altium schematic PDF, KiCad netlist (.net), or .zip with .net + .kicad_pcb">
+          Analyze a board
+          <input type="file" name="file" accept=".pdf,.net,.zip" hidden
+                 onchange="this.parentElement.firstChild.textContent='Analyzing… (~1-2 min)'; this.form.submit();">
+        </label>
+      </form>
       <a class="auth-link" href="/auth/logout">Log out</a>
       {% else %}
+      <span class="hint">Log in to add boards</span>
       <a class="auth-link" href="/auth/login">Log in with GitHub</a>
       {% endif %}
     </div>
@@ -37,18 +45,6 @@
         <span class="stat">Enrichment cost<b>${{ "%.3f"|format(totals.spend_usd) }}</b></span>
       </span>
       <span id="board-switcher" class="board-switcher"></span>
-      <span class="header-spacer"></span>
-      {% if is_admin %}
-      <form class="upload-form" method="post" action="/p/{{ project_id }}/upload" enctype="multipart/form-data">
-        <label class="upload-btn" title="Altium schematic PDF, KiCad netlist (.net), or .zip with .net + .kicad_pcb">
-          Analyze a board
-          <input type="file" name="file" accept=".pdf,.net,.zip" hidden
-                 onchange="this.parentElement.firstChild.textContent='Analyzing… (~1-2 min)'; this.form.submit();">
-        </label>
-      </form>
-      {% else %}
-      <span class="hint">Log in to add boards</span>
-      {% endif %}
     </div>
     {% endif %}
   </header>
