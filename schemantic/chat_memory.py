@@ -43,6 +43,15 @@ CREATE TABLE IF NOT EXISTS exchanges (
     embedding BLOB NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_exchanges_session ON exchanges(session_id);
+
+CREATE TABLE IF NOT EXISTS sessions (
+    session_id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    title TEXT NOT NULL DEFAULT '',
+    created_at REAL NOT NULL,
+    updated_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id);
 """
 
 # Pre-multi-project databases (including the live production one) predate
@@ -114,7 +123,17 @@ class ChatMemoryStore:
     ) -> bool:
         try:
             embedding = self.embed_fn(f"Q: {question}\nA: {answer}")
+            now = time.time()
             with self._connect() as conn:
+                # keeps the sessions table (used by the chat sidebar list) in
+                # sync regardless of whether needs_title() was called first --
+                # title is only set on first insert, updated_at bumps every time
+                conn.execute(
+                    "INSERT INTO sessions (session_id, project_id, title, created_at, updated_at) "
+                    "VALUES (?,?,?,?,?) "
+                    "ON CONFLICT(session_id) DO UPDATE SET updated_at = excluded.updated_at",
+                    (session_id, project_id, "", now, now),
+                )
                 conn.execute(
                     "INSERT INTO exchanges (project_id, session_id, board, question, answer, "
                     "tool_trace, created_at, embedding) VALUES (?,?,?,?,?,?,?,?)",
@@ -125,7 +144,7 @@ class ChatMemoryStore:
                         question,
                         answer,
                         " | ".join(tool_trace),
-                        time.time(),
+                        now,
                         _pack(embedding),
                     ),
                 )
@@ -133,6 +152,38 @@ class ChatMemoryStore:
         except Exception as exc:
             print(f"chat memory store failed (non-fatal): {exc}")
             return False
+
+    def needs_title(self, project_id: str, session_id: str) -> bool:
+        """True if this session has no title yet -- either brand new, or an
+        earlier title-generation attempt failed and was never retried. The
+        caller (chat_turn) checks this before generating one, so a session
+        only gets titled once even though every turn calls store()."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT title FROM sessions WHERE session_id = ? AND project_id = ?",
+                (session_id, project_id),
+            ).fetchone()
+        return row is None or not row[0]
+
+    def set_session_title(self, project_id: str, session_id: str, title: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE sessions SET title = ? WHERE session_id = ? AND project_id = ?",
+                (title, session_id, project_id),
+            )
+
+    def list_sessions(self, project_id: str) -> list[dict]:
+        """Most-recently-active first -- what the chat sidebar renders."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT session_id, title, created_at, updated_at FROM sessions "
+                "WHERE project_id = ? ORDER BY updated_at DESC",
+                (project_id,),
+            ).fetchall()
+        return [
+            {"session_id": s, "title": t, "created_at": c, "updated_at": u}
+            for s, t, c, u in rows
+        ]
 
     def recall(
         self,

@@ -7,6 +7,7 @@ a project boundary.
 """
 
 import sqlite3
+import time
 from pathlib import Path
 
 from schemantic.chat_memory import ChatMemoryStore
@@ -156,3 +157,38 @@ def test_legacy_database_migrates_and_backfills_default_project(tmp_path):
 
     backfilled = store.history("proj_default", "s1")
     assert backfilled and backfilled[0]["question"] == "legacy question"
+
+
+def test_needs_title_before_first_store_and_not_after(tmp_path):
+    store = _store(tmp_path)
+    assert store.needs_title("p1", "s1") is True  # session doesn't exist yet
+    store.store("p1", "s1", "boardA", "q", "a", [])
+    assert store.needs_title("p1", "s1") is True  # exists now, but title still empty
+    store.set_session_title("p1", "s1", "IMU location")
+    assert store.needs_title("p1", "s1") is False
+
+
+def test_list_sessions_most_recently_active_first(tmp_path):
+    # tiny sleeps between writes: updated_at ordering needs real timestamp
+    # separation, and time.time()'s resolution isn't guaranteed fine enough
+    # to distinguish back-to-back calls with no gap at all
+    store = _store(tmp_path)
+    store.store("p1", "s1", "boardA", "first question", "first answer", [])
+    store.set_session_title("p1", "s1", "First chat")
+    time.sleep(0.01)
+    store.store("p1", "s2", "boardA", "second question", "second answer", [])
+    store.set_session_title("p1", "s2", "Second chat")
+    time.sleep(0.01)
+    store.store("p1", "s1", "boardA", "back to first", "still first", [])  # bumps s1's updated_at
+
+    sessions = store.list_sessions("p1")
+    assert [s["session_id"] for s in sessions] == ["s1", "s2"]
+    assert [s["title"] for s in sessions] == ["First chat", "Second chat"]
+
+
+def test_list_sessions_is_scoped_by_project(tmp_path):
+    store = _store(tmp_path)
+    store.store("p1", "s1", "boardA", "q", "a", [])
+    store.store("p2", "s2", "boardC", "q", "a", [])
+    assert [s["session_id"] for s in store.list_sessions("p1")] == ["s1"]
+    assert [s["session_id"] for s in store.list_sessions("p2")] == ["s2"]
