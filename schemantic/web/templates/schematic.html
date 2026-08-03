@@ -24,7 +24,6 @@
         {%- endif %}
       </span>
       <span class="header-spacer"></span>
-      <span id="project-switcher" class="board-switcher"></span>
       {% if is_admin %}
       <form class="upload-form" method="post" action="/p/{{ project_id }}/upload" enctype="multipart/form-data">
         <label class="upload-btn" title="Altium schematic PDF, KiCad netlist (.net), or .zip with .net + .kicad_pcb">
@@ -132,7 +131,6 @@
   </aside>
   {% endif %}
 
-  <script src="/static/project_switcher.js"></script>
   {% if not empty %}
   <script src="/static/canvas.js"></script>
   <script src="/static/vendor/cytoscape.min.js"></script>
